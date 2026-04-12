@@ -1,9 +1,11 @@
+import pytest
 import asyncio
 import json
 import redis.asyncio as redis
 from app.research_agent import ResearchAgent
 from app.actor_agent import ActorAgent
 
+@pytest.mark.asyncio
 async def test_flow():
     print("Initializing Agents...")
     research_agent = ResearchAgent()
@@ -27,7 +29,7 @@ async def test_flow():
     print(f"Research Agent Confidence Score: {confidence}")
 
     # 3. Actor Agent decides on trade
-    trade_result = actor_agent.execute_trade(
+    trade_result = await actor_agent.execute_trade(
         test_tick["symbol"],
         test_tick["price"],
         confidence

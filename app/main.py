@@ -3,8 +3,11 @@ import json
 import time
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import PlainTextResponse
+from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 import redis.asyncio as redis
+from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST
 from app.actor_agent import ActorAgent
 from app.research_agent import ResearchAgent
 
@@ -18,6 +21,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Prometheus Metrics
+WEBSOCKET_CONNECTIONS = Gauge('websocket_connections_active', 'Active WebSocket Connections')
+TRADE_EXECUTION_LATENCY = Histogram('trade_execution_latency_seconds', 'Latency of trade execution logic')
+AGENT_MEMORY_QUERIES = Counter('agent_memory_queries_total', 'Total RAG queries made by Research Agent')
 
 # Global Agents and State
 actor_agent = ActorAgent(initial_balance=10000.0)
@@ -44,7 +52,8 @@ async def background_redis_listener():
                 # Mock automated trading logic: Occasionally close trades randomly to simulate trading flow
                 if actor_agent.open_positions and time.time() % 10 < 1:
                     trade_id = list(actor_agent.open_positions.keys())[0]
-                    actor_agent.close_trade(trade_id, latest_market_state["price"])
+                    # We must await async functions now
+                    await actor_agent.close_trade(trade_id, latest_market_state["price"])
 
     except Exception as e:
         print(f"Background Redis Error: {e}")
@@ -59,6 +68,7 @@ async def background_redis_listener():
 @app.websocket("/ws/prices")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
+    WEBSOCKET_CONNECTIONS.inc()
 
     # Connect to Redis
     r = redis.Redis(host='localhost', port=6379, db=0)
@@ -91,6 +101,7 @@ async def websocket_endpoint(websocket: WebSocket):
     except Exception as e:
         print(f"WebSocket Error: {e}")
     finally:
+        WEBSOCKET_CONNECTIONS.dec()
         await pubsub.unsubscribe("crypto_prices")
         await r.close()
         try:
@@ -101,6 +112,11 @@ async def websocket_endpoint(websocket: WebSocket):
 # -----------------
 # REST API Endpoints
 # -----------------
+@app.get("/metrics")
+async def metrics():
+    """Prometheus metrics endpoint."""
+    return PlainTextResponse(generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
 @app.get("/api/stats")
 async def get_stats():
     # Pass the current price so floating PnL is accurate
@@ -126,6 +142,10 @@ async def get_analysis():
     )
     return {"text": analysis}
 
+@app.get("/api/thoughts")
+async def get_thoughts():
+    return {"thoughts": research_agent.thought_log}
+
 class ControlRequest(BaseModel):
     action: str
 
@@ -139,16 +159,31 @@ async def admin_control(req: ControlRequest):
         actor_agent.losses = 0
         actor_agent.peak_wallet = 10000.0
         actor_agent.max_drawdown = 0.0
-        return {"status": "success", "message": "Wallet reset to $10,000"}
+        actor_agent.circuit_breaker_active = False
+        research_agent.thought_log = []
+        return {"status": "success", "message": "Wallet and Circuit Breaker reset"}
     elif req.action == "trigger_trade":
+        AGENT_MEMORY_QUERIES.inc()
         # Manually trigger a mock trade from the backend for demonstration
-        result = actor_agent.execute_trade("BTC", latest_market_state["price"], 0.95)
+        # First trigger research agent analysis to populate thought log
+        # Offload synchronous ChromaDB call to threadpool to prevent blocking the event loop
+        conf = await run_in_threadpool(
+            research_agent.analyze_current_state,
+            "BTC",
+            latest_market_state["price"],
+            latest_market_state["rsi"]
+        )
+
+        with TRADE_EXECUTION_LATENCY.time():
+             # Since it's now async, we must await it
+             result = await actor_agent.execute_trade("BTC", latest_market_state["price"], conf)
         return {"status": "success", "result": result}
     elif req.action == "close_trade":
         # Manually close the oldest open trade
         if actor_agent.open_positions:
             trade_id = list(actor_agent.open_positions.keys())[0]
-            result = actor_agent.close_trade(trade_id, latest_market_state["price"])
+            with TRADE_EXECUTION_LATENCY.time():
+                 result = await actor_agent.close_trade(trade_id, latest_market_state["price"])
             return {"status": "success", "result": result}
         return {"status": "error", "message": "No open trades"}
 

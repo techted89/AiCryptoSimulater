@@ -8,28 +8,44 @@ class ResearchAgent:
         # Initialize local ChromaDB client
         self.client = chromadb.PersistentClient(path="./chroma_db")
         self.collection = self.client.get_or_create_collection(name="market_memories")
+        self.thought_log = []
 
-    def _create_snapshot_text(self, symbol: str, price: float, rsi: float) -> str:
-        """Translates numerical indicators into a text snapshot for RAG."""
+    def _add_thought(self, message: str):
+        """Adds a thought to the internal log."""
+        timestamp = datetime.datetime.now().strftime("%H:%M:%S")
+        self.thought_log.insert(0, f"[{timestamp}] {message}")
+        if len(self.thought_log) > 50:
+            self.thought_log.pop()
+
+    def _create_snapshot_text(self, symbol: str, price: float, rsi: float, dxy: float = None, sp500: float = None, news: str = "Neutral") -> str:
+        """Translates numerical and macro indicators into a text snapshot for RAG."""
         sentiment = "Neutral"
         if rsi > 70:
             sentiment = "Overbought/Bearish"
         elif rsi < 30:
             sentiment = "Oversold/Bullish"
 
-        return f"Current {symbol} price is ${price:,.2f}, RSI is {rsi:.2f} ({sentiment})."
+        text = f"Current {symbol} price is ${price:,.2f}, RSI is {rsi:.2f} ({sentiment})."
+        if dxy is not None and sp500 is not None:
+            text += f" Macro context: DXY={dxy:.2f}, SP500={sp500:,.2f}."
+        if news != "Neutral":
+            text += f" Social/News sentiment is currently: {news}."
 
-    def record_snapshot(self, symbol: str, price: float, rsi: float, success: bool = None):
+        return text
+
+    def record_snapshot(self, symbol: str, price: float, rsi: float, dxy: float = None, sp500: float = None, news: str = "Neutral", success: bool = None):
         """Records a market state snapshot to memory."""
-        snapshot = self._create_snapshot_text(symbol, price, rsi)
+        snapshot = self._create_snapshot_text(symbol, price, rsi, dxy, sp500, news)
         doc_id = str(uuid.uuid4())
 
         # We store 'success' metadata to learn if this state led to a good trade in the past.
-        # Initially success might be None until the trade is resolved.
         metadata = {
             "symbol": symbol,
             "price": price,
             "rsi": rsi,
+            "dxy": dxy if dxy else 0.0,
+            "sp500": sp500 if sp500 else 0.0,
+            "news": news,
             "timestamp": datetime.datetime.now().isoformat(),
             "success": str(success) if success is not None else "pending"
         }
@@ -65,7 +81,7 @@ class ResearchAgent:
             "risk_profile": "Medium"
         }
 
-    def get_market_analysis(self, symbol: str, price: float, rsi: float) -> str:
+    def get_market_analysis(self, symbol: str, price: float, rsi: float, dxy: float = None, sp500: float = None, news: str = "Neutral") -> str:
         sentiment = "Neutral"
         if rsi > 70:
             sentiment = "Overbought/Bearish"
@@ -76,21 +92,30 @@ class ResearchAgent:
         analysis += f"Current Price: ${price:,.2f}\n"
         analysis += f"RSI (14): {rsi:.2f} -> Condition: {sentiment}.\n"
 
-        if rsi < 30:
+        if dxy and sp500:
+            analysis += f"Macro: DXY {dxy:.2f} | S&P500 {sp500:,.2f}\n"
+
+        if news != "Neutral":
+             analysis += f"Sentiment Alert: {news} news detected in pipeline.\n"
+
+        if rsi < 30 and news != "Bearish_News":
             analysis += "Recommendation: Favorable entry conditions. RAG memory indicates historical positive reversion from these levels."
-        elif rsi > 70:
-            analysis += "Recommendation: Caution. RAG memory indicates historical distribution patterns. Consider taking profit."
+        elif rsi > 70 or news == "Bearish_News":
+            analysis += "Recommendation: Caution. Overbought conditions or bearish news detected. Consider taking profit."
         else:
             analysis += "Recommendation: Hold. No clear directional bias from vector memory."
 
         return analysis
 
-    def analyze_current_state(self, symbol: str, price: float, rsi: float) -> float:
+    def analyze_current_state(self, symbol: str, price: float, rsi: float, dxy: float = None, sp500: float = None, news: str = "Neutral") -> float:
         """
-        Queries ChromaDB for similar past states.
+        Queries ChromaDB for similar past states using multi-modal inputs.
         Returns a mock 'Confidence Score' between 0.0 and 1.0.
         """
-        current_snapshot = self._create_snapshot_text(symbol, price, rsi)
+        current_snapshot = self._create_snapshot_text(symbol, price, rsi, dxy, sp500, news)
+        self._add_thought(f"Analyzing {symbol} context. (RSI: {rsi:.1f}, News: {news})")
+        if dxy:
+             self._add_thought(f"Macro correlation check (DXY: {dxy:.1f}, SPX: {sp500:.1f})")
 
         try:
             results = self.collection.query(
@@ -98,14 +123,18 @@ class ResearchAgent:
                 n_results=5
             )
         except Exception:
+            self._add_thought("RAG Query Failed: Database unavailable. Defaulting to 0.5 confidence.")
             return 0.5 # Default confidence if no data
 
         if not results or not results['metadatas'] or not results['metadatas'][0]:
             # No memory yet, default confidence
+            self._add_thought("No historical matches found in vector memory. Waiting for more data.")
             return 0.5
 
         # Mock logic: calculate confidence based on past successes
         past_memories = results['metadatas'][0]
+        self._add_thought(f"Found {len(past_memories)} similar historical contexts in ChromaDB.")
+
         success_count = 0
         total_resolved = 0
 
@@ -120,15 +149,20 @@ class ResearchAgent:
             return 0.5 # Not enough resolved history
 
         confidence = success_count / total_resolved
+        self._add_thought(f"Historical win rate for this pattern is {(confidence*100):.1f}%.")
 
         # Add a little boost based on RSI logic just to make the mock agent do something
         if rsi < 30:
             confidence += 0.2
+            self._add_thought("RSI indicates oversold conditions. Adjusting momentum weight +0.2.")
         elif rsi > 70:
             confidence -= 0.2
+            self._add_thought("RSI indicates overbought conditions. Adjusting momentum weight -0.2.")
 
         # Clamp between 0 and 1
-        return max(0.0, min(1.0, confidence))
+        final_confidence = max(0.0, min(1.0, confidence))
+        self._add_thought(f"Final Execution Confidence Score: {final_confidence:.2f}")
+        return final_confidence
 
 if __name__ == "__main__":
     agent = ResearchAgent()

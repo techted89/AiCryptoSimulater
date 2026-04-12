@@ -3,7 +3,8 @@
 import React, { useEffect, useState } from 'react';
 import TradingChart from '@/components/TradingChart';
 import StrategyAnalysisPanel from '@/components/StrategyAnalysisPanel';
-import { RefreshCw, Zap, Activity, XCircle } from 'lucide-react';
+import AgentTerminal from '@/components/AgentTerminal';
+import { RefreshCw, Zap, Activity, XCircle, AlertTriangle } from 'lucide-react';
 
 interface AgentStats {
   balance: number;
@@ -14,13 +15,18 @@ interface AgentStats {
   win_rate: number;
   max_drawdown: number;
   sharpe_ratio: number;
+  circuit_breaker_active: boolean;
 }
 
 interface Trade {
   id: string;
   symbol: string;
+  quoted_price?: number;
   entry_price: number;
   exit_price?: number;
+  slippage_pct?: number;
+  fee_usd?: number;
+  exit_fee_usd?: number;
   amount_usd: number;
   pnl?: number;
   confidence: number;
@@ -75,6 +81,16 @@ export default function Home() {
     <main className="min-h-screen bg-slate-950 text-slate-200 p-8">
       <div className="max-w-7xl mx-auto space-y-8">
 
+        {stats?.circuit_breaker_active && (
+          <div className="bg-rose-900/50 border border-rose-500 rounded-lg p-4 flex items-center gap-4 animate-pulse">
+            <AlertTriangle className="text-rose-400 w-6 h-6" />
+            <div>
+              <h3 className="text-rose-400 font-bold">CIRCUIT BREAKER TRIGGERED</h3>
+              <p className="text-rose-200 text-sm">Max drawdown exceeded 15%. All automated entries halted to protect capital.</p>
+            </div>
+          </div>
+        )}
+
         <header className="flex justify-between items-center border-b border-slate-800 pb-4">
           <div>
             <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-emerald-400 to-blue-500">
@@ -90,9 +106,10 @@ export default function Home() {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
 
-          {/* Left Column: Charts */}
-          <div className="lg:col-span-2">
+          {/* Left Column: Charts & Terminal */}
+          <div className="lg:col-span-2 space-y-6">
             <TradingChart />
+            <AgentTerminal />
           </div>
 
           {/* Right Column: God Mode Controls */}
@@ -178,15 +195,15 @@ export default function Home() {
                   <div className="space-y-2">
                     <h3 className="text-xs text-slate-400 uppercase tracking-wider font-semibold border-b border-slate-800 pb-1">Active Positions ({activeTrades.length})</h3>
                     {activeTrades.map((trade) => (
-                      <div key={trade.id} className="bg-slate-950 p-3 rounded-lg border border-blue-900/50 relative overflow-hidden">
+                      <div key={trade.id} className="bg-slate-950 p-3 rounded-lg border border-blue-900/50 relative overflow-hidden text-sm">
                         <div className="absolute top-0 left-0 w-1 h-full bg-blue-500 animate-pulse"></div>
                         <div className="flex justify-between items-center mb-1 pl-2">
                           <span className="font-semibold text-blue-400">{trade.symbol} <span className="text-xs text-slate-500 ml-1">OPEN</span></span>
-                          <span className="text-xs text-slate-400">Entry: ${trade.entry_price.toLocaleString()}</span>
+                          <span className="text-xs text-slate-400">Entry: ${trade.entry_price.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits:2})}</span>
                         </div>
-                        <div className="flex justify-between text-slate-400 text-xs pl-2">
-                          <span>Size: ${trade.amount_usd.toFixed(2)}</span>
-                          <span className="text-blue-500/70">Conf: {(trade.confidence * 100).toFixed(0)}%</span>
+                        <div className="flex justify-between text-slate-500 text-[10px] pl-2 mt-1 border-t border-slate-800 pt-1">
+                          <span>Fee: ${trade.fee_usd?.toFixed(2)}</span>
+                          <span>Slip: {trade.slippage_pct ? (trade.slippage_pct*100).toFixed(3) : '0'}%</span>
                         </div>
                       </div>
                     ))}
@@ -208,11 +225,11 @@ export default function Home() {
                           </span>
                         </div>
                         <div className="flex justify-between text-slate-400 text-xs">
-                          <span>In: ${trade.entry_price.toLocaleString()}</span>
-                          <span>Out: ${trade.exit_price?.toLocaleString()}</span>
+                          <span>In: ${trade.entry_price.toLocaleString(undefined, {maximumFractionDigits:2})}</span>
+                          <span>Out: ${trade.exit_price?.toLocaleString(undefined, {maximumFractionDigits:2})}</span>
                         </div>
-                        <div className="flex justify-between mt-2 text-xs">
-                           <span className="text-slate-500">Size: ${trade.amount_usd.toFixed(0)}</span>
+                        <div className="flex justify-between mt-2 text-xs border-t border-slate-800 pt-1">
+                           <span className="text-slate-500">Fees: ${(trade.fee_usd! + (trade.exit_fee_usd || 0)).toFixed(2)}</span>
                            <span className={`font-bold ${trade.pnl && trade.pnl >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
                              {trade.pnl && trade.pnl >= 0 ? '+' : ''}{trade.pnl?.toFixed(2)}
                            </span>

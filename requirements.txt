@@ -4,3 +4,5 @@ redis
 chromadb
 websockets
 pysqlite3-binary
+prometheus-client
+optuna

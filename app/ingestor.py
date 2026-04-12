@@ -20,11 +20,36 @@ async def simulate_data_ingestion():
             # Simple RSI simulation (just random for mock)
             rsi = random.uniform(20, 80)
 
+            # Advanced Realism: Mock L2 Order Book, DXY, and SP500
+            # Create a simple synthetic L2 order book structure
+            spread = random.uniform(0.1, 2.0)
+            best_bid = round(base_price - (spread / 2), 2)
+            best_ask = round(base_price + (spread / 2), 2)
+
+            bids = [[round(best_bid - i, 2), round(random.uniform(0.1, 5.0), 3)] for i in range(5)]
+            asks = [[round(best_ask + i, 2), round(random.uniform(0.1, 5.0), 3)] for i in range(5)]
+
+            # Mock Macro Indicators
+            dxy = round(104.0 + random.uniform(-0.5, 0.5), 2)
+            sp500 = round(5200.0 + random.uniform(-10, 10), 2)
+
+            # Mock News Sentiment Flag
+            sentiment = random.choice(["Neutral", "Neutral", "Neutral", "Bullish_News", "Bearish_News"])
+
             data = {
                 "symbol": "BTC",
                 "price": round(base_price, 2),
                 "rsi": round(rsi, 2),
-                "timestamp": time.time()
+                "timestamp": time.time(),
+                "order_book": {
+                    "bids": bids,
+                    "asks": asks
+                },
+                "macro": {
+                    "dxy": dxy,
+                    "sp500": sp500
+                },
+                "news_sentiment": sentiment
             }
 
             # Publish the data to the 'crypto_prices' channel
