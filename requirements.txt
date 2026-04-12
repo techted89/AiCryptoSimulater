@@ -1,0 +1,6 @@
+fastapi
+uvicorn
+redis
+chromadb
+websockets
+pysqlite3-binary
