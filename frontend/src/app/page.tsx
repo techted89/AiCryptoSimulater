@@ -2,24 +2,35 @@
 
 import React, { useEffect, useState } from 'react';
 import TradingChart from '@/components/TradingChart';
-import { RefreshCw, Zap, Activity } from 'lucide-react';
+import StrategyAnalysisPanel from '@/components/StrategyAnalysisPanel';
+import { RefreshCw, Zap, Activity, XCircle } from 'lucide-react';
 
 interface AgentStats {
   balance: number;
-  total_trades: number;
+  wallet_value: number;
+  floating_pnl: number;
+  open_positions: number;
+  total_closed_trades: number;
+  win_rate: number;
+  max_drawdown: number;
+  sharpe_ratio: number;
 }
 
 interface Trade {
+  id: string;
   symbol: string;
   entry_price: number;
+  exit_price?: number;
   amount_usd: number;
+  pnl?: number;
   confidence: number;
   status: string;
 }
 
 export default function Home() {
   const [stats, setStats] = useState<AgentStats | null>(null);
-  const [trades, setTrades] = useState<Trade[]>([]);
+  const [activeTrades, setActiveTrades] = useState<Trade[]>([]);
+  const [historyTrades, setHistoryTrades] = useState<Trade[]>([]);
   const [loading, setLoading] = useState(false);
 
   const fetchState = async () => {
@@ -30,7 +41,8 @@ export default function Home() {
 
       const tradesRes = await fetch('http://localhost:8000/api/trades');
       const tradesData = await tradesRes.json();
-      setTrades(tradesData.trades.reverse()); // Newest first
+      setActiveTrades(tradesData.active);
+      setHistoryTrades(tradesData.history.reverse()); // Newest closed first
     } catch (err) {
       console.error("Failed to fetch state:", err);
     }
@@ -86,21 +98,37 @@ export default function Home() {
           {/* Right Column: God Mode Controls */}
           <div className="space-y-6">
 
-            {/* Wallet Status */}
+            {/* Wallet Status & Advanced Stats */}
             <div className="bg-slate-900 p-6 rounded-xl border border-slate-800 shadow-lg">
               <h2 className="text-lg font-semibold text-white mb-4">Actor Agent State</h2>
-              <div className="grid grid-cols-2 gap-4">
+
+              <div className="grid grid-cols-2 gap-4 mb-4">
                 <div className="bg-slate-950 p-4 rounded-lg border border-slate-800">
-                  <p className="text-slate-400 text-xs uppercase tracking-wider">Mock Wallet</p>
+                  <p className="text-slate-400 text-xs uppercase tracking-wider">Est. Wallet Value</p>
                   <p className="text-2xl font-bold text-emerald-400 mt-1">
-                    ${stats?.balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '---'}
+                    ${stats?.wallet_value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '---'}
+                  </p>
+                  <p className={`text-xs mt-1 ${stats && stats.floating_pnl >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                    Float PnL: ${stats?.floating_pnl.toFixed(2) || '0.00'}
                   </p>
                 </div>
                 <div className="bg-slate-950 p-4 rounded-lg border border-slate-800">
-                  <p className="text-slate-400 text-xs uppercase tracking-wider">Total Trades</p>
+                  <p className="text-slate-400 text-xs uppercase tracking-wider">Win Rate</p>
                   <p className="text-2xl font-bold text-blue-400 mt-1">
-                    {stats?.total_trades ?? '---'}
+                    {stats?.win_rate.toFixed(1) || '0'}%
                   </p>
+                  <p className="text-slate-500 text-xs mt-1">{stats?.total_closed_trades || 0} Trades Closed</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-slate-950 p-3 rounded-lg border border-slate-800 flex justify-between items-center">
+                  <p className="text-slate-400 text-xs uppercase tracking-wider">Max Drawdown</p>
+                  <p className="text-sm font-bold text-rose-400">{stats?.max_drawdown.toFixed(2) || '0'}%</p>
+                </div>
+                <div className="bg-slate-950 p-3 rounded-lg border border-slate-800 flex justify-between items-center">
+                  <p className="text-slate-400 text-xs uppercase tracking-wider">Sharpe</p>
+                  <p className="text-sm font-bold text-purple-400">{stats?.sharpe_ratio.toFixed(2) || '0.00'}</p>
                 </div>
               </div>
             </div>
@@ -111,14 +139,24 @@ export default function Home() {
                 God Mode Controls
               </h2>
               <div className="space-y-3">
-                <button
-                  onClick={() => handleControlAction('trigger_trade')}
-                  disabled={loading}
-                  className="w-full flex items-center justify-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg font-medium transition-colors disabled:opacity-50"
-                >
-                  <Zap className="w-4 h-4" />
-                  <span>Force Mock Trade</span>
-                </button>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    onClick={() => handleControlAction('trigger_trade')}
+                    disabled={loading}
+                    className="w-full flex items-center justify-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg font-medium text-sm transition-colors disabled:opacity-50"
+                  >
+                    <Zap className="w-4 h-4" />
+                    <span>Force Entry</span>
+                  </button>
+                  <button
+                    onClick={() => handleControlAction('close_trade')}
+                    disabled={loading || activeTrades.length === 0}
+                    className="w-full flex items-center justify-center space-x-2 bg-orange-600 hover:bg-orange-700 text-white py-3 rounded-lg font-medium text-sm transition-colors disabled:opacity-50"
+                  >
+                    <XCircle className="w-4 h-4" />
+                    <span>Force Exit</span>
+                  </button>
+                </div>
                 <button
                   onClick={() => handleControlAction('reset_wallet')}
                   disabled={loading}
@@ -130,36 +168,69 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Trade Log */}
-            <div className="bg-slate-900 p-6 rounded-xl border border-slate-800 shadow-lg h-[300px] overflow-hidden flex flex-col">
-              <h2 className="text-lg font-semibold text-white mb-4">Recent Trades</h2>
-              <div className="overflow-y-auto flex-1 space-y-3 pr-2">
-                {trades.length === 0 ? (
-                  <p className="text-slate-500 text-sm text-center mt-8">No trades recorded yet.</p>
-                ) : (
-                  trades.map((trade, idx) => (
-                    <div key={idx} className="bg-slate-950 p-3 rounded-lg border border-slate-800 text-sm">
-                      <div className="flex justify-between items-center mb-1">
-                        <span className="font-semibold text-emerald-400">{trade.symbol}</span>
-                        <span className={`px-2 py-0.5 rounded text-[10px] uppercase tracking-wider font-bold ${trade.status === 'executed' ? 'bg-emerald-900/50 text-emerald-400' : 'bg-rose-900/50 text-rose-400'}`}>
-                          {trade.status}
-                        </span>
+            {/* Active & Recent Trades */}
+            <div className="bg-slate-900 p-6 rounded-xl border border-slate-800 shadow-lg h-[350px] overflow-hidden flex flex-col">
+              <h2 className="text-lg font-semibold text-white mb-4">Trade Breakdown</h2>
+              <div className="overflow-y-auto flex-1 space-y-4 pr-2">
+
+                {/* Active Trades */}
+                {activeTrades.length > 0 && (
+                  <div className="space-y-2">
+                    <h3 className="text-xs text-slate-400 uppercase tracking-wider font-semibold border-b border-slate-800 pb-1">Active Positions ({activeTrades.length})</h3>
+                    {activeTrades.map((trade) => (
+                      <div key={trade.id} className="bg-slate-950 p-3 rounded-lg border border-blue-900/50 relative overflow-hidden">
+                        <div className="absolute top-0 left-0 w-1 h-full bg-blue-500 animate-pulse"></div>
+                        <div className="flex justify-between items-center mb-1 pl-2">
+                          <span className="font-semibold text-blue-400">{trade.symbol} <span className="text-xs text-slate-500 ml-1">OPEN</span></span>
+                          <span className="text-xs text-slate-400">Entry: ${trade.entry_price.toLocaleString()}</span>
+                        </div>
+                        <div className="flex justify-between text-slate-400 text-xs pl-2">
+                          <span>Size: ${trade.amount_usd.toFixed(2)}</span>
+                          <span className="text-blue-500/70">Conf: {(trade.confidence * 100).toFixed(0)}%</span>
+                        </div>
                       </div>
-                      <div className="flex justify-between text-slate-400 text-xs">
-                        <span>Entry: ${trade.entry_price.toLocaleString()}</span>
-                        <span>Size: ${trade.amount_usd.toFixed(2)}</span>
-                      </div>
-                      <div className="mt-2 text-xs text-blue-400">
-                        Agent Confidence: {(trade.confidence * 100).toFixed(1)}%
-                      </div>
-                    </div>
-                  ))
+                    ))}
+                  </div>
                 )}
+
+                {/* Historical Trades */}
+                <div className="space-y-2">
+                  <h3 className="text-xs text-slate-400 uppercase tracking-wider font-semibold border-b border-slate-800 pb-1">Trade History</h3>
+                  {historyTrades.length === 0 ? (
+                    <p className="text-slate-500 text-xs text-center mt-4">No closed trades.</p>
+                  ) : (
+                    historyTrades.map((trade) => (
+                      <div key={trade.id} className="bg-slate-950 p-3 rounded-lg border border-slate-800 text-sm">
+                        <div className="flex justify-between items-center mb-1">
+                          <span className="font-semibold text-slate-300">{trade.symbol}</span>
+                          <span className={`px-2 py-0.5 rounded text-[10px] uppercase tracking-wider font-bold ${trade.pnl && trade.pnl > 0 ? 'bg-emerald-900/50 text-emerald-400' : 'bg-rose-900/50 text-rose-400'}`}>
+                            {trade.pnl && trade.pnl > 0 ? 'WIN' : 'LOSS'}
+                          </span>
+                        </div>
+                        <div className="flex justify-between text-slate-400 text-xs">
+                          <span>In: ${trade.entry_price.toLocaleString()}</span>
+                          <span>Out: ${trade.exit_price?.toLocaleString()}</span>
+                        </div>
+                        <div className="flex justify-between mt-2 text-xs">
+                           <span className="text-slate-500">Size: ${trade.amount_usd.toFixed(0)}</span>
+                           <span className={`font-bold ${trade.pnl && trade.pnl >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                             {trade.pnl && trade.pnl >= 0 ? '+' : ''}{trade.pnl?.toFixed(2)}
+                           </span>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+
               </div>
             </div>
 
           </div>
         </div>
+
+        {/* Strategy & Analysis Row */}
+        <StrategyAnalysisPanel />
+
       </div>
     </main>
   );

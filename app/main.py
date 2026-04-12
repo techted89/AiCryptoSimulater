@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import redis.asyncio as redis
 from app.actor_agent import ActorAgent
+from app.research_agent import ResearchAgent
 
 app = FastAPI()
 
@@ -18,8 +19,39 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Global Actor Agent instance for the backend state
+# Global Agents and State
 actor_agent = ActorAgent(initial_balance=10000.0)
+research_agent = ResearchAgent()
+
+# To calculate live stats, we need the most recent price
+latest_market_state = {"price": 65000.0, "rsi": 50.0}
+
+@app.on_event("startup")
+async def startup_event():
+    asyncio.create_task(background_redis_listener())
+
+async def background_redis_listener():
+    r = redis.Redis(host='localhost', port=6379, db=0)
+    pubsub = r.pubsub()
+    await pubsub.subscribe("crypto_prices")
+    try:
+        async for message in pubsub.listen():
+            if message["type"] == "message":
+                data = json.loads(message["data"].decode("utf-8"))
+                latest_market_state["price"] = data.get("price", 65000.0)
+                latest_market_state["rsi"] = data.get("rsi", 50.0)
+
+                # Mock automated trading logic: Occasionally close trades randomly to simulate trading flow
+                if actor_agent.open_positions and time.time() % 10 < 1:
+                    trade_id = list(actor_agent.open_positions.keys())[0]
+                    actor_agent.close_trade(trade_id, latest_market_state["price"])
+
+    except Exception as e:
+        print(f"Background Redis Error: {e}")
+    finally:
+        await pubsub.unsubscribe("crypto_prices")
+        await r.close()
+
 
 # -----------------
 # WebSocket Endpoint
@@ -71,12 +103,28 @@ async def websocket_endpoint(websocket: WebSocket):
 # -----------------
 @app.get("/api/stats")
 async def get_stats():
-    return actor_agent.get_stats()
+    # Pass the current price so floating PnL is accurate
+    return actor_agent.get_stats(current_price=latest_market_state["price"])
 
 @app.get("/api/trades")
 async def get_trades():
-    # Return the last 20 trades
-    return {"trades": actor_agent.mock_trades[-20:]}
+    # Combine active open positions and historical trades
+    active = list(actor_agent.open_positions.values())
+    history = actor_agent.mock_trades[-20:] # Last 20 closed
+    return {"active": active, "history": history}
+
+@app.get("/api/strategy")
+async def get_strategy():
+    return research_agent.get_strategy_details()
+
+@app.get("/api/analysis")
+async def get_analysis():
+    analysis = research_agent.get_market_analysis(
+        "BTC",
+        latest_market_state["price"],
+        latest_market_state["rsi"]
+    )
+    return {"text": analysis}
 
 class ControlRequest(BaseModel):
     action: str
@@ -86,11 +134,23 @@ async def admin_control(req: ControlRequest):
     if req.action == "reset_wallet":
         actor_agent.balance = 10000.0
         actor_agent.mock_trades = []
+        actor_agent.open_positions = {}
+        actor_agent.wins = 0
+        actor_agent.losses = 0
+        actor_agent.peak_wallet = 10000.0
+        actor_agent.max_drawdown = 0.0
         return {"status": "success", "message": "Wallet reset to $10,000"}
     elif req.action == "trigger_trade":
         # Manually trigger a mock trade from the backend for demonstration
-        result = actor_agent.execute_trade("BTC", 65000.0, 0.95)
+        result = actor_agent.execute_trade("BTC", latest_market_state["price"], 0.95)
         return {"status": "success", "result": result}
+    elif req.action == "close_trade":
+        # Manually close the oldest open trade
+        if actor_agent.open_positions:
+            trade_id = list(actor_agent.open_positions.keys())[0]
+            result = actor_agent.close_trade(trade_id, latest_market_state["price"])
+            return {"status": "success", "result": result}
+        return {"status": "error", "message": "No open trades"}
 
     return {"status": "error", "message": "Unknown action"}
 

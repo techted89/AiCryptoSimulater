@@ -57,6 +57,34 @@ class ResearchAgent:
                 metadatas=[metadata]
             )
 
+    def get_strategy_details(self) -> dict:
+        return {
+            "name": "Mean Reversion with RSI Momentum",
+            "description": "This strategy attempts to buy oversold conditions and sell overbought conditions based on the Relative Strength Index (RSI). It searches for historical patterns in the ChromaDB vector database where similar states lead to profitable outcomes. It includes a baseline confidence metric built from historical successes and a momentum adjustment.",
+            "indicators": ["RSI", "Price Action", "Historical Memory Search"],
+            "risk_profile": "Medium"
+        }
+
+    def get_market_analysis(self, symbol: str, price: float, rsi: float) -> str:
+        sentiment = "Neutral"
+        if rsi > 70:
+            sentiment = "Overbought/Bearish"
+        elif rsi < 30:
+            sentiment = "Oversold/Bullish"
+
+        analysis = f"Market Analysis for {symbol}:\n"
+        analysis += f"Current Price: ${price:,.2f}\n"
+        analysis += f"RSI (14): {rsi:.2f} -> Condition: {sentiment}.\n"
+
+        if rsi < 30:
+            analysis += "Recommendation: Favorable entry conditions. RAG memory indicates historical positive reversion from these levels."
+        elif rsi > 70:
+            analysis += "Recommendation: Caution. RAG memory indicates historical distribution patterns. Consider taking profit."
+        else:
+            analysis += "Recommendation: Hold. No clear directional bias from vector memory."
+
+        return analysis
+
     def analyze_current_state(self, symbol: str, price: float, rsi: float) -> float:
         """
         Queries ChromaDB for similar past states.
