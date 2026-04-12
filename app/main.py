@@ -2,10 +2,28 @@ import asyncio
 import json
 import time
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 import redis.asyncio as redis
+from app.actor_agent import ActorAgent
 
 app = FastAPI()
 
+# Enable CORS for the frontend
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"], # For development
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Global Actor Agent instance for the backend state
+actor_agent = ActorAgent(initial_balance=10000.0)
+
+# -----------------
+# WebSocket Endpoint
+# -----------------
 @app.websocket("/ws/prices")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
@@ -47,6 +65,34 @@ async def websocket_endpoint(websocket: WebSocket):
             await websocket.close()
         except Exception:
             pass
+
+# -----------------
+# REST API Endpoints
+# -----------------
+@app.get("/api/stats")
+async def get_stats():
+    return actor_agent.get_stats()
+
+@app.get("/api/trades")
+async def get_trades():
+    # Return the last 20 trades
+    return {"trades": actor_agent.mock_trades[-20:]}
+
+class ControlRequest(BaseModel):
+    action: str
+
+@app.post("/api/control")
+async def admin_control(req: ControlRequest):
+    if req.action == "reset_wallet":
+        actor_agent.balance = 10000.0
+        actor_agent.mock_trades = []
+        return {"status": "success", "message": "Wallet reset to $10,000"}
+    elif req.action == "trigger_trade":
+        # Manually trigger a mock trade from the backend for demonstration
+        result = actor_agent.execute_trade("BTC", 65000.0, 0.95)
+        return {"status": "success", "result": result}
+
+    return {"status": "error", "message": "Unknown action"}
 
 @app.get("/")
 async def root():
