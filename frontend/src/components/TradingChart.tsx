@@ -34,8 +34,14 @@ export default function TradingChart() {
   const [l2Book, setL2Book] = useState<L2Book | null>(null);
   const [macro, setMacro] = useState<Macro | null>(null);
   const [sentiment, setSentiment] = useState<string>("Neutral");
+  const [timeWindow, setTimeWindow] = useState<number>(30); // Default to 30 points
 
   const wsRef = useRef<WebSocket | null>(null);
+  const timeWindowRef = useRef(timeWindow);
+
+  useEffect(() => {
+    timeWindowRef.current = timeWindow;
+  }, [timeWindow]);
 
   useEffect(() => {
     // Connect to the FastAPI WebSocket
@@ -54,9 +60,9 @@ export default function TradingChart() {
 
         setData((prev) => {
           const newData = [...prev, { time: timeStr, price: payload.price, rsi: payload.rsi }];
-          // Keep only the last 30 data points so the chart doesn't grow infinitely
-          if (newData.length > 30) {
-            return newData.slice(newData.length - 30);
+          // Keep only the last N data points so the chart doesn't grow infinitely
+          if (timeWindowRef.current > 0 && newData.length > timeWindowRef.current) {
+            return newData.slice(newData.length - timeWindowRef.current);
           }
           return newData;
         });
@@ -112,7 +118,24 @@ export default function TradingChart() {
         {/* Price Chart */}
         <div className="flex-1 bg-slate-900 p-4 rounded-xl shadow-lg border border-slate-800 flex flex-col">
           <div className="flex justify-between items-center mb-2">
-            <h3 className="text-emerald-400 font-semibold">BTC/USD Price Live Stream</h3>
+            <div className="flex items-center gap-4">
+              <h3 className="text-emerald-400 font-semibold">BTC/USD Price Live Stream</h3>
+              <div className="flex gap-1">
+                {[30, 100, 0].map((val) => (
+                  <button
+                    key={val}
+                    onClick={() => setTimeWindow(val)}
+                    className={`px-2 py-0.5 text-[10px] rounded border transition-colors ${
+                      timeWindow === val
+                        ? 'bg-emerald-900/50 border-emerald-500 text-emerald-300'
+                        : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700'
+                    }`}
+                  >
+                    {val === 0 ? 'All' : `${val} Ticks`}
+                  </button>
+                ))}
+              </div>
+            </div>
             <span className="text-[10px] text-amber-500 bg-amber-900/30 px-2 py-0.5 rounded border border-amber-800">
                ⚠️ Showing Estimated Liquidation Bands (±2%)
             </span>
