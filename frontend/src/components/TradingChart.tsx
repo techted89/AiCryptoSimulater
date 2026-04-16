@@ -9,7 +9,8 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  Legend
+  Legend,
+  ReferenceLine
 } from 'recharts';
 
 interface ChartDataPoint {
@@ -121,15 +122,23 @@ export default function TradingChart() {
           <LineChart data={data}>
             <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
             <XAxis dataKey="time" stroke="#94a3b8" fontSize={12} />
-            <YAxis domain={['auto', 'auto']} stroke="#94a3b8" fontSize={12} width={80} />
+            <YAxis domain={['auto', 'auto']} stroke="#94a3b8" fontSize={12} width={80} tickFormatter={(value) => `$${value.toLocaleString()}`} />
             <Tooltip
               contentStyle={{ backgroundColor: '#1e293b', border: 'none', borderRadius: '8px' }}
               itemStyle={{ color: '#e2e8f0' }}
+              formatter={(value: number, name: string) => {
+                if (name === 'price') return [`$${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 'Price'];
+                return [value, name];
+              }}
             />
             <Legend />
             {/* Mock Liquidation Heatmaps */}
-            {currentPrice > 0 && <line x1="0%" y1={longLiqBand} x2="100%" y2={longLiqBand} stroke="#ef4444" strokeWidth={4} opacity={0.2} />}
-            {currentPrice > 0 && <line x1="0%" y1={shortLiqBand} x2="100%" y2={shortLiqBand} stroke="#10b981" strokeWidth={4} opacity={0.2} />}
+            {currentPrice > 0 && (
+              <ReferenceLine y={longLiqBand} stroke="#ef4444" strokeWidth={4} strokeOpacity={0.2} label={{ position: 'insideBottomLeft', value: 'Long Liq', fill: '#ef4444', fontSize: 10 }} />
+            )}
+            {currentPrice > 0 && (
+              <ReferenceLine y={shortLiqBand} stroke="#10b981" strokeWidth={4} strokeOpacity={0.2} label={{ position: 'insideTopLeft', value: 'Short Liq', fill: '#10b981', fontSize: 10 }} />
+            )}
 
             <Line
               type="monotone"
@@ -189,10 +198,14 @@ export default function TradingChart() {
             <Tooltip
               contentStyle={{ backgroundColor: '#1e293b', border: 'none', borderRadius: '8px' }}
               itemStyle={{ color: '#e2e8f0' }}
+              formatter={(value: number, name: string) => {
+                if (name === 'rsi') return [value.toFixed(2), 'RSI'];
+                return [value, name];
+              }}
             />
             {/* Overbought/Oversold lines */}
-            <line x1="0%" y1="30%" x2="100%" y2="30%" stroke="#ef4444" strokeDasharray="3 3" />
-            <line x1="0%" y1="70%" x2="100%" y2="70%" stroke="#ef4444" strokeDasharray="3 3" />
+            <ReferenceLine y={30} stroke="#ef4444" strokeDasharray="3 3" />
+            <ReferenceLine y={70} stroke="#ef4444" strokeDasharray="3 3" />
             <Line
               type="monotone"
               dataKey="rsi"
