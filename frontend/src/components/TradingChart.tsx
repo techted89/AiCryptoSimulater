@@ -145,7 +145,7 @@ export default function TradingChart() {
           <LineChart data={data}>
             <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
             <XAxis dataKey="time" stroke="#94a3b8" fontSize={12} />
-            <YAxis domain={['auto', 'auto']} stroke="#94a3b8" fontSize={12} width={80} tickFormatter={(value) => `$${value.toLocaleString()}`} />
+            <YAxis domain={['auto', 'auto']} stroke="#94a3b8" fontSize={12} width={100} tickFormatter={(value) => typeof value === 'number' ? `$${value.toLocaleString()}` : ''} />
             <Tooltip
               contentStyle={{ backgroundColor: '#1e293b', border: 'none', borderRadius: '8px' }}
               itemStyle={{ color: '#e2e8f0' }}
