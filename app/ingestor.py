@@ -20,6 +20,14 @@ async def simulate_data_ingestion():
             # Simple RSI simulation (just random for mock)
             rsi = random.uniform(20, 80)
 
+            # Additional Indicators Simulation
+            mfi = random.uniform(20, 80)
+            cmf = random.uniform(-1.0, 1.0)
+            stoch_rsi = random.uniform(0, 100)
+            tdi = random.uniform(30, 70)
+            macd = random.uniform(-100, 100)
+            obv = random.uniform(-10000, 10000)
+
             # Advanced Realism: Mock L2 Order Book, DXY, and SP500
             # Create a simple synthetic L2 order book structure
             spread = random.uniform(0.1, 2.0)
@@ -40,6 +48,12 @@ async def simulate_data_ingestion():
                 "symbol": "BTC",
                 "price": round(base_price, 2),
                 "rsi": round(rsi, 2),
+                "mfi": round(mfi, 2),
+                "cmf": round(cmf, 2),
+                "stoch_rsi": round(stoch_rsi, 2),
+                "tdi": round(tdi, 2),
+                "macd": round(macd, 2),
+                "obv": round(obv, 2),
                 "timestamp": time.time(),
                 "order_book": {
                     "bids": bids,

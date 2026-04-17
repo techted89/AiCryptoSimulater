@@ -9,13 +9,20 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  Legend
+  Legend,
+  ReferenceLine
 } from 'recharts';
 
 interface ChartDataPoint {
   time: string;
   price: number;
   rsi: number;
+  mfi?: number;
+  cmf?: number;
+  stoch_rsi?: number;
+  tdi?: number;
+  macd?: number;
+  obv?: number;
 }
 
 interface L2Book {
@@ -28,11 +35,15 @@ interface Macro {
   sp500: number;
 }
 
+const MAX_DATA_POINTS = 10000;
+
 export default function TradingChart() {
   const [data, setData] = useState<ChartDataPoint[]>([]);
   const [l2Book, setL2Book] = useState<L2Book | null>(null);
   const [macro, setMacro] = useState<Macro | null>(null);
   const [sentiment, setSentiment] = useState<string>("Neutral");
+  const [timeWindow, setTimeWindow] = useState<number>(30); // Default to 30 points
+  const [activeIndicators, setActiveIndicators] = useState<string[]>(['rsi']);
 
   const wsRef = useRef<WebSocket | null>(null);
 
@@ -52,10 +63,19 @@ export default function TradingChart() {
         const timeStr = date.toLocaleTimeString([], { hour12: false, second: '2-digit' });
 
         setData((prev) => {
-          const newData = [...prev, { time: timeStr, price: payload.price, rsi: payload.rsi }];
-          // Keep only the last 30 data points so the chart doesn't grow infinitely
-          if (newData.length > 30) {
-            return newData.slice(newData.length - 30);
+          const newData = [...prev, {
+            time: timeStr,
+            price: payload.price,
+            rsi: payload.rsi,
+            mfi: payload.mfi,
+            cmf: payload.cmf,
+            stoch_rsi: payload.stoch_rsi,
+            tdi: payload.tdi,
+            macd: payload.macd,
+            obv: payload.obv
+          }];
+          if (newData.length > MAX_DATA_POINTS) {
+            return newData.slice(newData.length - MAX_DATA_POINTS);
           }
           return newData;
         });
@@ -84,6 +104,18 @@ export default function TradingChart() {
   const longLiqBand = currentPrice * 0.98; // 2% drop
   const shortLiqBand = currentPrice * 1.02; // 2% pump
 
+  const displayData = timeWindow > 0 ? data.slice(-timeWindow) : data;
+
+  const indicatorConfigs: Record<string, { title: string, color: string, domain: [any, any], referenceLines?: { y: number, color: string }[] }> = {
+    rsi: { title: "RSI (Relative Strength Index)", color: "#3b82f6", domain: [0, 100], referenceLines: [{ y: 30, color: "#10b981" }, { y: 70, color: "#ef4444" }] },
+    mfi: { title: "MFI (Money Flow Index)", color: "#8b5cf6", domain: [0, 100], referenceLines: [{ y: 20, color: "#10b981" }, { y: 80, color: "#ef4444" }] },
+    cmf: { title: "CMF (Chaikin Money Flow)", color: "#14b8a6", domain: [-1, 1], referenceLines: [{ y: 0, color: "#94a3b8" }] },
+    stoch_rsi: { title: "StochRSI (Stochastic RSI)", color: "#f59e0b", domain: [0, 100], referenceLines: [{ y: 20, color: "#10b981" }, { y: 80, color: "#ef4444" }] },
+    tdi: { title: "TDI (Traders Dynamic Index)", color: "#ec4899", domain: [30, 70], referenceLines: [{ y: 50, color: "#94a3b8" }] },
+    macd: { title: "MACD", color: "#6366f1", domain: ['auto', 'auto'], referenceLines: [{ y: 0, color: "#94a3b8" }] },
+    obv: { title: "OBV (On-Balance Volume)", color: "#eab308", domain: ['auto', 'auto'] }
+  };
+
   return (
     <div className="w-full h-full flex flex-col space-y-4">
       {/* Real-Time Macro & Sentiment Bar */}
@@ -111,25 +143,69 @@ export default function TradingChart() {
         {/* Price Chart */}
         <div className="flex-1 bg-slate-900 p-4 rounded-xl shadow-lg border border-slate-800 flex flex-col">
           <div className="flex justify-between items-center mb-2">
-            <h3 className="text-emerald-400 font-semibold">BTC/USD Price Live Stream</h3>
-            <span className="text-[10px] text-amber-500 bg-amber-900/30 px-2 py-0.5 rounded border border-amber-800">
+            <div className="flex items-center gap-4">
+              <h3 className="text-emerald-400 font-semibold">BTC/USD Price Live Stream</h3>
+              <div className="flex gap-1">
+                {[30, 100, 0].map((val) => (
+                  <button
+                    key={val}
+                    onClick={() => setTimeWindow(val)}
+                    className={`px-2 py-0.5 text-[10px] rounded border transition-colors ${
+                      timeWindow === val
+                        ? 'bg-emerald-900/50 border-emerald-500 text-emerald-300'
+                        : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700'
+                    }`}
+                  >
+                    {val === 0 ? 'All' : `${val} Ticks`}
+                  </button>
+                ))}
+              </div>
+              <div className="flex gap-1 ml-4 border-l border-slate-700 pl-4">
+                {['rsi', 'mfi', 'cmf', 'stoch_rsi', 'tdi', 'macd', 'obv'].map((indicator) => (
+                  <button
+                    key={indicator}
+                    onClick={() => setActiveIndicators(prev =>
+                      prev.includes(indicator)
+                        ? prev.filter(i => i !== indicator)
+                        : [...prev, indicator]
+                    )}
+                    className={`px-2 py-0.5 text-[10px] rounded border transition-colors uppercase ${
+                      activeIndicators.includes(indicator)
+                        ? 'bg-blue-900/50 border-blue-500 text-blue-300'
+                        : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700'
+                    }`}
+                  >
+                    {indicator.replace('_', ' ')}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <span className="text-[10px] text-amber-500 bg-amber-900/30 px-2 py-0.5 rounded border border-amber-800 hidden lg:inline-block">
                ⚠️ Showing Estimated Liquidation Bands (±2%)
             </span>
           </div>
           <div className="flex-1">
             <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={data}>
+          <LineChart data={displayData}>
             <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
             <XAxis dataKey="time" stroke="#94a3b8" fontSize={12} />
-            <YAxis domain={['auto', 'auto']} stroke="#94a3b8" fontSize={12} width={80} />
+            <YAxis domain={['auto', 'auto']} stroke="#94a3b8" fontSize={12} width={80} tickFormatter={(value) => `$${value.toLocaleString()}`} />
             <Tooltip
               contentStyle={{ backgroundColor: '#1e293b', border: 'none', borderRadius: '8px' }}
               itemStyle={{ color: '#e2e8f0' }}
+              formatter={(value: number, name: string) => {
+                if (name === 'price') return [`$${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 'Price'];
+                return [value, name];
+              }}
             />
             <Legend />
             {/* Mock Liquidation Heatmaps */}
-            {currentPrice > 0 && <line x1="0%" y1={longLiqBand} x2="100%" y2={longLiqBand} stroke="#ef4444" strokeWidth={4} opacity={0.2} />}
-            {currentPrice > 0 && <line x1="0%" y1={shortLiqBand} x2="100%" y2={shortLiqBand} stroke="#10b981" strokeWidth={4} opacity={0.2} />}
+            {currentPrice > 0 && (
+              <ReferenceLine y={longLiqBand} stroke="#ef4444" strokeWidth={4} strokeOpacity={0.2} label={{ position: 'insideBottomLeft', value: 'Long Liq', fill: '#ef4444', fontSize: 10 }} />
+            )}
+            {currentPrice > 0 && (
+              <ReferenceLine y={shortLiqBand} stroke="#10b981" strokeWidth={4} strokeOpacity={0.2} label={{ position: 'insideTopLeft', value: 'Short Liq', fill: '#10b981', fontSize: 10 }} />
+            )}
 
             <Line
               type="monotone"
@@ -178,32 +254,51 @@ export default function TradingChart() {
         </div>
       </div>
 
-      {/* RSI Chart */}
-      <div className="h-[200px] w-full bg-slate-900 p-4 rounded-xl shadow-lg border border-slate-800">
-        <h3 className="text-blue-400 font-semibold mb-2">RSI (Relative Strength Index)</h3>
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={data}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-            <XAxis dataKey="time" stroke="#94a3b8" fontSize={12} />
-            <YAxis domain={[0, 100]} stroke="#94a3b8" fontSize={12} width={40} />
-            <Tooltip
-              contentStyle={{ backgroundColor: '#1e293b', border: 'none', borderRadius: '8px' }}
-              itemStyle={{ color: '#e2e8f0' }}
-            />
-            {/* Overbought/Oversold lines */}
-            <line x1="0%" y1="30%" x2="100%" y2="30%" stroke="#ef4444" strokeDasharray="3 3" />
-            <line x1="0%" y1="70%" x2="100%" y2="70%" stroke="#ef4444" strokeDasharray="3 3" />
-            <Line
-              type="monotone"
-              dataKey="rsi"
-              stroke="#3b82f6"
-              strokeWidth={2}
-              dot={false}
-              isAnimationActive={false}
-            />
-          </LineChart>
-        </ResponsiveContainer>
-      </div>
+      {/* Stacked Indicator Charts */}
+      {activeIndicators.map(indicator => {
+        const config = indicatorConfigs[indicator];
+        if (!config) return null;
+
+        return (
+          <div key={indicator} className="h-[200px] w-full bg-slate-900 p-4 rounded-xl shadow-lg border border-slate-800">
+            <div className="flex justify-between items-center mb-2">
+              <h3 className="font-semibold" style={{ color: config.color }}>{config.title}</h3>
+              <button
+                onClick={() => setActiveIndicators(prev => prev.filter(i => i !== indicator))}
+                className="text-slate-500 hover:text-rose-400"
+              >
+                ✕
+              </button>
+            </div>
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={displayData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                <XAxis dataKey="time" stroke="#94a3b8" fontSize={12} />
+                <YAxis domain={config.domain} stroke="#94a3b8" fontSize={12} width={40} />
+                <Tooltip
+                  contentStyle={{ backgroundColor: '#1e293b', border: 'none', borderRadius: '8px' }}
+                  itemStyle={{ color: '#e2e8f0' }}
+                  formatter={(value: number, name: string) => {
+                    if (name === indicator) return [value.toFixed(2), indicator.toUpperCase()];
+                    return [value, name];
+                  }}
+                />
+                {config.referenceLines && config.referenceLines.map((line, idx) => (
+                  <ReferenceLine key={idx} y={line.y} stroke={line.color} strokeDasharray="3 3" />
+                ))}
+                <Line
+                  type="monotone"
+                  dataKey={indicator}
+                  stroke={config.color}
+                  strokeWidth={2}
+                  dot={false}
+                  isAnimationActive={false}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        );
+      })}
     </div>
   );
 }
