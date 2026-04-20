@@ -96,8 +96,6 @@ class ActorAgent:
                             ans = res.json().get("choices", [{}])[0].get("message", {}).get("content", "")
                             if "CLOSE" in ans.upper():
                                 should_close = True
-                            elif "HOLD" in ans.upper():
-                                should_close = False
                             print("Evaluated exit using Fallback Groq")
                     except Exception as e:
                         print("Both LLM calls failed. Falling back to algorithmic analysis.")
