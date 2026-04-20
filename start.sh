@@ -14,7 +14,7 @@ echo "Starting Data Ingestor..."
 python app/ingestor.py &
 
 echo "Starting Frontend..."
-cd frontend && npm run dev &
+(cd frontend && npm run dev) &
 
 echo "========================================="
 echo " All services started.                   "
