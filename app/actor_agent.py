@@ -34,8 +34,8 @@ class ActorAgent:
                 pos["funding_fees_paid"] = 0.0
             pos["funding_fees_paid"] += funding_fee
 
-    async def execute_trade(self, symbol: str, price: float, confidence_score: float, l2_book: dict = None, total_wallet_value: float = None) -> dict:
-        """Executes a mock trade with latency simulation, L2-based slippage, and fees."""
+    async def execute_trade(self, symbol: str, price: float, confidence_score: float, direction: str = "LONG", leverage: float = 1.0, l2_book: dict = None, total_wallet_value: float = None) -> dict:
+        """Executes a mock futures trade with direction, leverage, latency simulation, L2-based slippage, and fees."""
         if self.circuit_breaker_active:
              return {"status": "rejected", "reason": "Circuit Breaker Active"}
 
@@ -46,30 +46,31 @@ class ActorAgent:
         if total_wallet_value is None:
             total_wallet_value = self.balance
 
-        # Cap at 5% of wallet value to pass risk checks
-        trade_fraction = min(0.05, confidence_score * 0.05)
-        trade_amount = total_wallet_value * trade_fraction
+        # Cap at 5% of wallet value to pass risk checks for initial margin
+        margin_fraction = min(0.05, confidence_score * 0.05)
+        initial_margin = total_wallet_value * margin_fraction
 
-        if trade_amount < 10.0 or trade_amount > self.balance:
+        notional_value = initial_margin * leverage
+
+        if initial_margin < 10.0 or (initial_margin + (initial_margin * leverage * 0.001)) > self.balance:
             return {"status": "skipped", "reason": "Trade amount invalid"}
 
-        if not self.check_risk(trade_amount, total_wallet_value):
+        if not self.check_risk(initial_margin, total_wallet_value):
             return {"status": "rejected", "reason": "Risk check failed"}
 
         # Advanced Realism: L2 Order Book Slippage Calculation
-        if l2_book and "asks" in l2_book:
-            # Calculate depth-weighted average price (DWAP)
-            # We are buying, so we eat into the 'asks'
-            remaining_usd = trade_amount
+        if l2_book and ((direction == "LONG" and "asks" in l2_book) or (direction == "SHORT" and "bids" in l2_book)):
+            book_side = "asks" if direction == "LONG" else "bids"
+            remaining_usd = notional_value
             total_tokens_bought = 0.0
             vwap_sum = 0.0
 
-            for ask_price, ask_vol in l2_book["asks"]:
+            for price_level, vol in l2_book[book_side]:
                 if remaining_usd <= 0:
                     break
-                available_usd_at_level = ask_price * ask_vol
+                available_usd_at_level = price_level * vol
                 usd_to_take = min(remaining_usd, available_usd_at_level)
-                tokens_to_take = usd_to_take / ask_price
+                tokens_to_take = usd_to_take / price_level
 
                 total_tokens_bought += tokens_to_take
                 vwap_sum += usd_to_take
@@ -77,31 +78,41 @@ class ActorAgent:
 
             if total_tokens_bought > 0:
                 entry_price = vwap_sum / total_tokens_bought
-                slippage_pct = (entry_price - price) / price
+                slippage_pct = abs(entry_price - price) / price
             else:
                 slippage_pct = random.uniform(0.0001, 0.0005)
-                entry_price = price * (1 + slippage_pct)
+                entry_price = price * (1 + slippage_pct) if direction == "LONG" else price * (1 - slippage_pct)
         else:
             # Fallback if no L2 book provided
             slippage_pct = random.uniform(0.0001, 0.0005)
-            entry_price = price * (1 + slippage_pct)
+            entry_price = price * (1 + slippage_pct) if direction == "LONG" else price * (1 - slippage_pct)
 
-        # Fee: 0.1% typical taker fee
-        fee_usd = trade_amount * 0.001
-        capital_deployed = trade_amount - fee_usd
+        # Fee: 0.1% typical taker fee on notional value
+        fee_usd = notional_value * 0.001
 
-        self.balance -= trade_amount
+        self.balance -= initial_margin
+        self.balance -= fee_usd # Deduct fee upfront
         trade_id = str(uuid.uuid4())
+
+        # Calculate liquidation price
+        if direction == "LONG":
+            liquidation_price = entry_price * (1 - (1/leverage))
+        else:
+            liquidation_price = entry_price * (1 + (1/leverage))
 
         trade_record = {
             "id": trade_id,
             "symbol": symbol,
+            "direction": direction,
+            "leverage": leverage,
             "quoted_price": price,
             "entry_price": entry_price,
+            "liquidation_price": liquidation_price,
             "slippage_pct": slippage_pct,
             "fee_usd": fee_usd,
-            "amount_usd": trade_amount,
-            "tokens": capital_deployed / entry_price,
+            "amount_usd": initial_margin,
+            "notional_usd": notional_value,
+            "tokens": notional_value / entry_price,
             "confidence": confidence_score,
             "status": "open"
         }
@@ -109,8 +120,8 @@ class ActorAgent:
         self.open_positions[trade_id] = trade_record
         return trade_record
 
-    async def close_trade(self, trade_id: str, current_price: float, l2_book: dict = None) -> dict:
-        """Closes an open mock trade with latency, L2 slippage, and fees."""
+    async def close_trade(self, trade_id: str, current_price: float, l2_book: dict = None, liquidation: bool = False) -> dict:
+        """Closes an open mock futures trade with latency, L2 slippage, and fees."""
         if trade_id not in self.open_positions:
             return {"status": "error", "reason": "Trade not found"}
 
@@ -123,35 +134,47 @@ class ActorAgent:
         latency = random.uniform(0.02, 0.1)
         await asyncio.sleep(latency)
 
-        # Realism: L2 Slippage on exit (Selling into bids)
-        if l2_book and "bids" in l2_book:
+        direction = trade.get("direction", "LONG")
+
+        # Realism: L2 Slippage on exit
+        if l2_book and ((direction == "LONG" and "bids" in l2_book) or (direction == "SHORT" and "asks" in l2_book)):
+            book_side = "bids" if direction == "LONG" else "asks"
             remaining_tokens = trade["tokens"]
             total_usd_received = 0.0
 
-            for bid_price, bid_vol in l2_book["bids"]:
+            for price_level, vol in l2_book[book_side]:
                 if remaining_tokens <= 0:
                     break
-                tokens_to_take = min(remaining_tokens, bid_vol)
-                usd_gained = tokens_to_take * bid_price
+                tokens_to_take = min(remaining_tokens, vol)
+                usd_gained = tokens_to_take * price_level
 
                 total_usd_received += usd_gained
                 remaining_tokens -= tokens_to_take
 
             if trade["tokens"] > 0:
                 exit_price = total_usd_received / trade["tokens"]
-                slippage_pct = (current_price - exit_price) / current_price
+                slippage_pct = abs(current_price - exit_price) / current_price
             else:
                 slippage_pct = random.uniform(0.0001, 0.0005)
-                exit_price = current_price * (1 - slippage_pct)
+                exit_price = current_price * (1 - slippage_pct) if direction == "LONG" else current_price * (1 + slippage_pct)
         else:
             slippage_pct = random.uniform(0.0001, 0.0005)
-            exit_price = current_price * (1 - slippage_pct)
+            exit_price = current_price * (1 - slippage_pct) if direction == "LONG" else current_price * (1 + slippage_pct)
 
-        gross_exit_value = trade["tokens"] * exit_price
-        exit_fee = gross_exit_value * 0.001 # 0.1% fee
-        net_exit_value = gross_exit_value - exit_fee
+        if liquidation:
+            # Force exit price to exactly the liquidation price if liquidated
+            exit_price = trade["liquidation_price"]
 
-        pnl = net_exit_value - trade["amount_usd"]
+        gross_exit_notional = trade["tokens"] * exit_price
+        exit_fee = gross_exit_notional * 0.001 # 0.1% fee on notional
+
+        # Calculate PnL based on direction
+        if direction == "LONG":
+            pnl = gross_exit_notional - trade["notional_usd"]
+        else:
+            pnl = trade["notional_usd"] - gross_exit_notional
+
+        net_exit_value = trade["amount_usd"] + pnl - exit_fee
 
         self.balance += net_exit_value
 
@@ -162,11 +185,27 @@ class ActorAgent:
 
         trade["exit_price"] = exit_price
         trade["exit_fee_usd"] = exit_fee
-        trade["pnl"] = pnl
-        trade["status"] = "closed"
+        trade["pnl"] = pnl - exit_fee - trade["fee_usd"] # Total PnL includes all fees
+        trade["status"] = "liquidated" if liquidation else "closed"
 
         self.mock_trades.append(trade)
         return trade
+
+    async def check_liquidations(self, current_price: float):
+        """Checks all open positions against their liquidation price and liquidates if breached."""
+        trades_to_close = []
+        for trade_id, trade in list(self.open_positions.items()):
+            direction = trade.get("direction", "LONG")
+            liq_price = trade.get("liquidation_price")
+
+            if liq_price:
+                if direction == "LONG" and current_price <= liq_price:
+                    trades_to_close.append(trade_id)
+                elif direction == "SHORT" and current_price >= liq_price:
+                    trades_to_close.append(trade_id)
+
+        if trades_to_close:
+            await asyncio.gather(*[self.close_trade(tid, current_price, liquidation=True) for tid in trades_to_close])
 
     def update_mdd(self, current_wallet_value: float):
         if current_wallet_value > self.peak_wallet:

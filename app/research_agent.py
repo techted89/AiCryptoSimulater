@@ -107,15 +107,25 @@ class ResearchAgent:
 
         return analysis
 
-    def analyze_current_state(self, symbol: str, price: float, rsi: float, dxy: float = None, sp500: float = None, news: str = "Neutral") -> float:
+    def analyze_current_state(self, symbol: str, price: float, rsi: float, dxy: float = None, sp500: float = None, news: str = "Neutral") -> dict:
         """
         Queries ChromaDB for similar past states using multi-modal inputs.
-        Returns a mock 'Confidence Score' between 0.0 and 1.0.
+        Returns a dictionary with 'confidence' score (0.0 to 1.0) and 'direction' ('LONG' or 'SHORT').
         """
         current_snapshot = self._create_snapshot_text(symbol, price, rsi, dxy, sp500, news)
         self._add_thought(f"Analyzing {symbol} context. (RSI: {rsi:.1f}, News: {news})")
         if dxy:
              self._add_thought(f"Macro correlation check (DXY: {dxy:.1f}, SPX: {sp500:.1f})")
+
+        direction = "LONG" # Default bias
+
+        # Determine direction based on basic RSI mean reversion
+        if rsi > 60 or news == "Bearish_News":
+            direction = "SHORT"
+            self._add_thought(f"Directional Bias: SHORT. Overbought RSI ({rsi:.1f}) or Bearish News.")
+        elif rsi < 40 or news == "Bullish_News":
+            direction = "LONG"
+            self._add_thought(f"Directional Bias: LONG. Oversold RSI ({rsi:.1f}) or Bullish News.")
 
         try:
             results = self.collection.query(
@@ -124,12 +134,12 @@ class ResearchAgent:
             )
         except Exception:
             self._add_thought("RAG Query Failed: Database unavailable. Defaulting to 0.5 confidence.")
-            return 0.5 # Default confidence if no data
+            return {"confidence": 0.5, "direction": direction} # Default confidence if no data
 
         if not results or not results['metadatas'] or not results['metadatas'][0]:
             # No memory yet, default confidence
             self._add_thought("No historical matches found in vector memory. Waiting for more data.")
-            return 0.5
+            return {"confidence": 0.5, "direction": direction}
 
         # Mock logic: calculate confidence based on past successes
         past_memories = results['metadatas'][0]
@@ -146,23 +156,21 @@ class ResearchAgent:
                 total_resolved += 1
 
         if total_resolved == 0:
-            return 0.5 # Not enough resolved history
+            return {"confidence": 0.5, "direction": direction} # Not enough resolved history
 
         confidence = success_count / total_resolved
         self._add_thought(f"Historical win rate for this pattern is {(confidence*100):.1f}%.")
 
         # Add a little boost based on RSI logic just to make the mock agent do something
-        if rsi < 30:
+        if (rsi < 30 and direction == "LONG") or (rsi > 70 and direction == "SHORT"):
             confidence += 0.2
-            self._add_thought("RSI indicates oversold conditions. Adjusting momentum weight +0.2.")
-        elif rsi > 70:
-            confidence -= 0.2
-            self._add_thought("RSI indicates overbought conditions. Adjusting momentum weight -0.2.")
+            self._add_thought("RSI aligns strongly with directional bias. Adjusting momentum weight +0.2.")
 
         # Clamp between 0 and 1
         final_confidence = max(0.0, min(1.0, confidence))
         self._add_thought(f"Final Execution Confidence Score: {final_confidence:.2f}")
-        return final_confidence
+
+        return {"confidence": final_confidence, "direction": direction}
 
 if __name__ == "__main__":
     agent = ResearchAgent()
