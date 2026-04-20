@@ -144,12 +144,14 @@ class ResearchAgent:
              self._add_thought(f"Gemini response: {llm_response[:50]}...")
              try:
                  import re
-                 match = re.search(r'\\b(0\\.\\d+|1\\.0|[01])\\b', llm_response)
+                 match = re.search(r'\b(0\.\d+|1\.0|0|1)\b', llm_response)
                  if match:
-                     llm_conf = float(match.group(0))
-                     return llm_conf
+                     llm_conf = float(match.group(1))
+                     if 0.0 <= llm_conf <= 1.0:
+                         self.previous_rsi = rsi
+                         return llm_conf
              except Exception as e:
-                 pass
+                 self._add_thought(f"Gemini parse failed: {e}")
 
         try:
             # Relax threshold or fallback to synthetic bootstrapping

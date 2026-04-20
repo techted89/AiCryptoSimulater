@@ -7,7 +7,7 @@ from app.research_agent import ResearchAgent
 from app.actor_agent import ActorAgent
 
 @pytest.mark.asyncio
-@patch('app.actor_agent.requests.post')
+@patch('app.actor_agent.aiohttp.ClientSession.post')
 async def test_flow(mock_post):
     # Mock LLM API response for evaluate_exits
     class MockResponse:
@@ -45,6 +45,7 @@ async def test_flow(mock_post):
     )
     print(f"Actor Agent Trade Result: {trade_result}")
 
+
     # Assertions
     assert "status" in trade_result
 
@@ -56,6 +57,11 @@ async def test_flow(mock_post):
         success=True # Assuming it was a good trade for mock purposes
     )
     print(f"Recorded memory snapshot with doc_id: {doc_id}")
+
+    # Exercise ActorAgent.evaluate_exits
+    print("Exercising evaluate_exits...")
+    await actor_agent.evaluate_exits(64000.0)
+    print("evaluate_exits completed.")
 
     # Verify overall state
     stats = actor_agent.get_stats()

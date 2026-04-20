@@ -124,18 +124,25 @@ export default function Home() {
   }, []);
 
 
+
   const handleSaveKeys = async () => {
     setLoading(true);
     try {
-      await fetch(`${baseUrl}/api/keys`, {
+      const response = await fetch(`${baseUrl}/api/keys`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ actor_key: actorKey, researcher_key: researcherKey, groq_key: groqKey }),
       });
-      setKeysSaved(true);
-      setTimeout(() => setKeysSaved(false), 3000);
+      if (response.ok) {
+        setKeysSaved(true);
+        setTimeout(() => setKeysSaved(false), 3000);
+      } else {
+        const errorText = await response.text();
+        console.error('Failed to save keys:', response.status, errorText);
+        throw new Error(`API Error: ${response.status}`);
+      }
     } catch (err) {
-      console.error('Failed to save keys:', err);
+      console.error('Error saving keys:', err);
     } finally {
       setLoading(false);
     }

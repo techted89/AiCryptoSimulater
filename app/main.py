@@ -1,5 +1,7 @@
 import asyncio
 import json
+from fastapi import HTTPException, Security
+from fastapi.security import APIKeyHeader
 import os
 import time
 import random
@@ -65,7 +67,15 @@ async def background_redis_listener():
 
                 # Analyze and execute entries autonomously
                 # Throttle entries
-                if len(actor_agent.open_positions) < 3 and random.random() > 0.8:
+                global _last_entry_analysis_at
+                try:
+                    _last_entry_analysis_at
+                except NameError:
+                    _last_entry_analysis_at = 0
+
+                COOLDOWN_SECONDS = 10
+                if len(actor_agent.open_positions) < 3 and (time.time() - _last_entry_analysis_at) >= COOLDOWN_SECONDS:
+                    _last_entry_analysis_at = time.time()
                     conf = await research_agent.analyze_current_state(
                         "BTC",
                         latest_market_state["price"],
@@ -263,12 +273,29 @@ class KeysRequest(BaseModel):
     researcher_key: str
     groq_key: str = ""
 
+
+API_KEY_NAME = "X-Admin-Token"
+api_key_header = APIKeyHeader(name=API_KEY_NAME, auto_error=False)
+
+# Mock secure store
+_secure_store = {}
+
 @app.post("/api/keys")
-async def set_keys(req: KeysRequest):
+async def set_keys(req: KeysRequest, token: str = Security(api_key_header)):
+    # Very basic auth
+    if token != "super-secret-admin-token":
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    _secure_store["GEMINI_API_KEY_ACTOR"] = req.actor_key
+    _secure_store["GEMINI_API_KEY_RESEARCHER"] = req.researcher_key
+    if req.groq_key:
+        _secure_store["GROQ_API_KEY"] = req.groq_key
+
+    # Also set env so the rest of the app that reads env works
     os.environ["GEMINI_API_KEY_ACTOR"] = req.actor_key
     os.environ["GEMINI_API_KEY_RESEARCHER"] = req.researcher_key
     if req.groq_key:
         os.environ["GROQ_API_KEY"] = req.groq_key
+
     return {"status": "success", "message": "API keys updated"}
 
 

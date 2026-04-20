@@ -2,9 +2,10 @@ import uuid
 
 import random
 import asyncio
+import aiohttp
+import traceback
 
 import os
-import requests
 
 
 class ActorAgent:
@@ -42,7 +43,8 @@ class ActorAgent:
     async def evaluate_exits(self, current_price: float, l2_book: dict = None):
         """Autonomously decides when to close trades based on profit targets, stop loss, or LLM analysis."""
         trades_to_close = []
-        for trade_id, trade in self.open_positions.items():
+        positions = list(self.open_positions.items())
+        for trade_id, trade in positions:
             entry_price = trade["entry_price"]
             pnl_pct = (current_price - entry_price) / entry_price
 
@@ -51,54 +53,46 @@ class ActorAgent:
             if pnl_pct > 0.02 or pnl_pct < -0.01:
                 should_close = True
 
-            # Hybrid Local/Cloud LLM Evaluation
-            prompt = f"Trade ID: {trade_id}\nSymbol: {trade['symbol']}\nEntry Price: {entry_price}\nCurrent Price: {current_price}\nPnL: {pnl_pct*100:.2f}%\n\nShould I CLOSE this trade or HOLD? Respond strictly with 'CLOSE' or 'HOLD'."
+            # Hybrid Local/Cloud LLM Evaluation only if neutral band
+            if not should_close and -0.01 <= pnl_pct <= 0.02:
+                prompt = f"Trade ID: {trade_id}\nSymbol: {trade['symbol']}\nEntry Price: {entry_price}\nCurrent Price: {current_price}\nPnL: {pnl_pct*100:.2f}%\n\nShould I CLOSE this trade or HOLD? Respond strictly with 'CLOSE' or 'HOLD'."
 
-            # Try Local Ollama first
-            try:
-                # Use executor to prevent blocking the async loop
-                import concurrent.futures
-                with concurrent.futures.ThreadPoolExecutor() as pool:
-                    res = await asyncio.get_event_loop().run_in_executor(
-                        pool,
-                        lambda: requests.post(
-                            "http://localhost:11434/v1/chat/completions",
+                try:
+                    async with aiohttp.ClientSession() as session:
+                        async with session.post(
+                            f"{os.environ.get('OLLAMA_BASE_URL', 'http://localhost:11434')}/v1/chat/completions",
                             json={"model": "llama3.2:1b", "messages": [{"role": "user", "content": prompt}]},
-                            timeout=2.0
-                        )
-                    )
-                if res.status_code == 200:
-                    ans = res.json().get("choices", [{}])[0].get("message", {}).get("content", "")
-                    if "CLOSE" in ans.upper():
-                        should_close = True
-                    elif "HOLD" in ans.upper():
-                        should_close = False
-                    print("Evaluated exit using Local Ollama")
-                else:
-                    raise Exception("Ollama error")
-            except Exception as e:
-                # Fallback to Groq
-                groq_key = os.environ.get("GROQ_API_KEY")
-                if groq_key:
-                    try:
-                        with concurrent.futures.ThreadPoolExecutor() as pool:
+                            timeout=aiohttp.ClientTimeout(total=2.0)
+                        ) as res:
+                            if res.status == 200:
+                                data = await res.json()
+                                ans = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+                                if "CLOSE" in ans.upper():
+                                    should_close = True
+                                print("Evaluated exit using Local Ollama")
+                            else:
+                                raise Exception("Ollama error")
+                except Exception as e:
+                    # Fallback to Groq
+                    groq_key = os.environ.get("GROQ_API_KEY")
+                    if groq_key:
+                        try:
                             headers = {"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"}
-                            res = await asyncio.get_event_loop().run_in_executor(
-                                pool,
-                                lambda: requests.post(
+                            async with aiohttp.ClientSession() as session:
+                                async with session.post(
                                     "https://api.groq.com/openai/v1/chat/completions",
                                     headers=headers,
                                     json={"model": "llama3-8b-8192", "messages": [{"role": "user", "content": prompt}]},
-                                    timeout=2.0
-                                )
-                            )
-                        if res.status_code == 200:
-                            ans = res.json().get("choices", [{}])[0].get("message", {}).get("content", "")
-                            if "CLOSE" in ans.upper():
-                                should_close = True
-                            print("Evaluated exit using Fallback Groq")
-                    except Exception as e:
-                        print("Both LLM calls failed. Falling back to algorithmic analysis.")
+                                    timeout=aiohttp.ClientTimeout(total=2.0)
+                                ) as res:
+                                    if res.status == 200:
+                                        data = await res.json()
+                                        ans = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+                                        if "CLOSE" in ans.upper():
+                                            should_close = True
+                                        print("Evaluated exit using Fallback Groq")
+                        except Exception as e:
+                            print("Both LLM calls failed. Falling back to algorithmic analysis.")
 
             if should_close:
                 trades_to_close.append(trade_id)
