@@ -40,24 +40,13 @@ Alternatively, you can install dependencies manually:
 
 ## Running the Simulator
 
-To start the full stack locally, open three separate terminal windows:
+To start the full stack locally, simply execute the `start.sh` script:
 
-1.  **Start the Backend API**:
-    ```bash
-    uvicorn app.main:app --reload --port 8000
-    ```
+```bash
+./start.sh
+```
 
-2.  **Start the Data Ingestor**:
-    ```bash
-    python app/ingestor.py
-    ```
-
-3.  **Start the Frontend UI**:
-    ```bash
-    cd frontend && npm run dev
-    ```
-
-Navigate to `http://localhost:3000` to view the live dashboard.
+This will automatically start the Backend API, the Data Ingestor, and the Frontend UI in the background. Navigate to `http://localhost:3000` to view the live dashboard. To stop all services, press `Ctrl+C` in the terminal.
 
 ## Running Tests
 
