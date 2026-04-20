@@ -59,29 +59,48 @@ export default function Home() {
     // Perform an initial fetch to populate UI instantly
     fetchState();
 
-    const ws = new WebSocket('ws://localhost:8000/ws/state');
+    let ws: WebSocket | null = null;
+    let reconnectTimeout: ReturnType<typeof setTimeout>;
+    let isComponentMounted = true;
 
-    ws.onmessage = (event) => {
-      try {
-        const payload = JSON.parse(event.data);
-        if (payload.stats) {
-          setStats(payload.stats);
+    const connectWebSocket = () => {
+      ws = new WebSocket('ws://localhost:8000/ws/state');
+
+      ws.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data);
+          if (payload.stats) {
+            setStats(payload.stats);
+          }
+          if (payload.trades) {
+            setActiveTrades(payload.trades.active);
+            setHistoryTrades(payload.trades.history.reverse());
+          }
+        } catch (err) {
+          console.error("Failed to parse state WS message:", err);
         }
-        if (payload.trades) {
-          setActiveTrades(payload.trades.active);
-          setHistoryTrades(payload.trades.history.reverse());
+      };
+
+      ws.onerror = (error) => {
+        console.error("State WebSocket error:", error);
+      };
+
+      ws.onclose = () => {
+        if (isComponentMounted) {
+          console.log("State WebSocket closed, attempting to reconnect in 3s...");
+          reconnectTimeout = setTimeout(connectWebSocket, 3000);
         }
-      } catch (err) {
-        console.error("Failed to parse state WS message:", err);
-      }
+      };
     };
 
-    ws.onerror = (error) => {
-      console.error("State WebSocket error:", error);
-    };
+    connectWebSocket();
 
     return () => {
-      ws.close();
+      isComponentMounted = false;
+      clearTimeout(reconnectTimeout);
+      if (ws) {
+        ws.close();
+      }
     };
   }, []);
 

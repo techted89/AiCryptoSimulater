@@ -37,10 +37,6 @@ research_agent = ResearchAgent()
 # To calculate live stats, we need the most recent price
 latest_market_state = {"price": 65000.0, "rsi": 50.0}
 
-@app.on_event("startup")
-async def startup_event():
-    asyncio.create_task(background_redis_listener())
-
 async def background_redis_listener():
     r = redis.Redis(host='localhost', port=6379, db=0)
     pubsub = r.pubsub()
@@ -117,34 +113,75 @@ async def websocket_endpoint(websocket: WebSocket):
 # -----------------
 # State WebSocket Endpoint
 # -----------------
+# Broadcast task and state
+active_state_connections: list[WebSocket] = []
+shared_agent_state = None
+
+async def broadcast_state_task():
+    global shared_agent_state
+    while True:
+        try:
+            if active_state_connections:
+                # Calculate state once
+                stats = actor_agent.get_stats(current_price=latest_market_state["price"])
+                active = list(actor_agent.open_positions.values())
+                history = actor_agent.mock_trades[-20:] # Last 20 closed
+
+                shared_agent_state = {
+                    "stats": stats,
+                    "trades": {
+                        "active": active,
+                        "history": history
+                    }
+                }
+
+                # Broadcast to all connected clients
+                disconnected = []
+                for ws in active_state_connections:
+                    try:
+                        await ws.send_json(shared_agent_state)
+                    except Exception:
+                        disconnected.append(ws)
+
+                for ws in disconnected:
+                    active_state_connections.remove(ws)
+
+            await asyncio.sleep(1.0) # Update rate
+        except Exception as e:
+            print(f"Broadcast State Error: {e}")
+            await asyncio.sleep(1.0)
+
+@app.on_event("startup")
+async def startup_event():
+    asyncio.create_task(background_redis_listener())
+    asyncio.create_task(broadcast_state_task())
+
 @app.websocket("/ws/state")
 async def state_websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     WEBSOCKET_CONNECTIONS.inc()
+    active_state_connections.append(websocket)
     print("Client connected to /ws/state")
+
+    # Send current state immediately upon connection if available
+    if shared_agent_state:
+        try:
+            await websocket.send_json(shared_agent_state)
+        except Exception:
+            pass
+
     try:
+        # Keep connection open to receive disconnect events
         while True:
-            # Gather state
-            stats = actor_agent.get_stats(current_price=latest_market_state["price"])
-            active = list(actor_agent.open_positions.values())
-            history = actor_agent.mock_trades[-20:] # Last 20 closed
-
-            data = {
-                "stats": stats,
-                "trades": {
-                    "active": active,
-                    "history": history
-                }
-            }
-
-            await websocket.send_json(data)
-            await asyncio.sleep(1.0) # Push state every 1 second
+            await websocket.receive_text()
 
     except WebSocketDisconnect:
         print("Client disconnected from /ws/state")
     except Exception as e:
         print(f"State WebSocket Error: {e}")
     finally:
+        if websocket in active_state_connections:
+            active_state_connections.remove(websocket)
         WEBSOCKET_CONNECTIONS.dec()
         try:
             await websocket.close()
