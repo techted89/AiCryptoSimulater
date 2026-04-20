@@ -54,11 +54,35 @@ export default function Home() {
     }
   };
 
-  // Poll for state every 2 seconds
+  // Connect to the state WebSocket
   useEffect(() => {
+    // Perform an initial fetch to populate UI instantly
     fetchState();
-    const interval = setInterval(fetchState, 2000);
-    return () => clearInterval(interval);
+
+    const ws = new WebSocket('ws://localhost:8000/ws/state');
+
+    ws.onmessage = (event) => {
+      try {
+        const payload = JSON.parse(event.data);
+        if (payload.stats) {
+          setStats(payload.stats);
+        }
+        if (payload.trades) {
+          setActiveTrades(payload.trades.active);
+          setHistoryTrades(payload.trades.history.reverse());
+        }
+      } catch (err) {
+        console.error("Failed to parse state WS message:", err);
+      }
+    };
+
+    ws.onerror = (error) => {
+      console.error("State WebSocket error:", error);
+    };
+
+    return () => {
+      ws.close();
+    };
   }, []);
 
   const handleControlAction = async (action: string) => {
