@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { Target, BookOpen } from 'lucide-react';
 
 interface StrategyDetails {
@@ -17,6 +17,18 @@ interface AnalysisData {
 export default function StrategyAnalysisPanel() {
   const [strategy, setStrategy] = useState<StrategyDetails | null>(null);
   const [analysis, setAnalysis] = useState<AnalysisData | null>(null);
+
+  const analysisLines = useMemo(() => {
+    if (!analysis) return null;
+    return analysis.text.split('\n').map((line, i) => {
+      if (!line.trim()) return <br key={i} />;
+      let color = "text-slate-300";
+      if (line.includes("Bullish") || line.includes("Favorable")) color = "text-emerald-400";
+      if (line.includes("Bearish") || line.includes("Caution")) color = "text-rose-400";
+      if (line.includes("Recommendation:")) return <p key={i} className={`mt-2 font-bold ${color}`}>{line}</p>;
+      return <p key={i} className={color}>{line}</p>;
+    });
+  }, [analysis?.text]);
 
   const fetchData = async () => {
     try {
@@ -88,14 +100,7 @@ export default function StrategyAnalysisPanel() {
         </h2>
         {analysis ? (
           <div className="bg-slate-950 rounded-lg border border-slate-800 p-4 h-[200px] overflow-y-auto font-mono text-sm">
-            {analysis.text.split('\n').map((line, i) => {
-              if (!line.trim()) return <br key={i} />;
-              let color = "text-slate-300";
-              if (line.includes("Bullish") || line.includes("Favorable")) color = "text-emerald-400";
-              if (line.includes("Bearish") || line.includes("Caution")) color = "text-rose-400";
-              if (line.includes("Recommendation:")) return <p key={i} className={`mt-2 font-bold ${color}`}>{line}</p>;
-              return <p key={i} className={color}>{line}</p>;
-            })}
+            {analysisLines}
           </div>
         ) : (
           <div className="h-[200px] bg-slate-950 rounded-lg border border-slate-800 flex items-center justify-center">
