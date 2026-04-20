@@ -1,7 +1,6 @@
 import uuid
 
 import random
-import time
 import asyncio
 
 class ActorAgent:
