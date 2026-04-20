@@ -52,7 +52,7 @@ class ActorAgent:
 
         notional_value = initial_margin * leverage
 
-        if initial_margin < 10.0 or initial_margin > self.balance:
+        if initial_margin < 10.0 or (initial_margin + (initial_margin * leverage * 0.001)) > self.balance:
             return {"status": "skipped", "reason": "Trade amount invalid"}
 
         if not self.check_risk(initial_margin, total_wallet_value):
