@@ -144,7 +144,7 @@ class ResearchAgent:
              self._add_thought(f"Gemini response: {llm_response[:50]}...")
              try:
                  import re
-                 match = re.search(r'0\.\d+|1\.0|0|1', llm_response)
+                 match = re.search(r'\\b(0\\.\\d+|1\\.0|[01])\\b', llm_response)
                  if match:
                      llm_conf = float(match.group(0))
                      return llm_conf
