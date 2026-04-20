@@ -6,7 +6,7 @@ echo " Starting AI Crypto Trading Simulator    "
 echo "========================================="
 
 # Terminate all background processes on script exit
-trap "echo 'Stopping all services...'; kill 0" SIGINT SIGTERM EXIT
+trap "echo 'Stopping all services...'; kill 0" EXIT
 
 echo "Starting Backend API..."
 uvicorn app.main:app --port 8000 &
