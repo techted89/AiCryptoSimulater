@@ -39,13 +39,17 @@ export default function Home() {
   const [historyTrades, setHistoryTrades] = useState<Trade[]>([]);
   const [loading, setLoading] = useState(false);
 
+  // Determine dynamic base URLs for the backend API and WS
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+  const baseWsUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8000';
+
   const fetchState = async () => {
     try {
-      const statsRes = await fetch('http://localhost:8000/api/stats');
+      const statsRes = await fetch(`${baseUrl}/api/stats`);
       const statsData = await statsRes.json();
       setStats(statsData);
 
-      const tradesRes = await fetch('http://localhost:8000/api/trades');
+      const tradesRes = await fetch(`${baseUrl}/api/trades`);
       const tradesData = await tradesRes.json();
       setActiveTrades(tradesData.active);
       setHistoryTrades(tradesData.history.reverse()); // Newest closed first
@@ -54,17 +58,71 @@ export default function Home() {
     }
   };
 
-  // Poll for state every 2 seconds
+  // Connect to the state WebSocket
   useEffect(() => {
+    // Perform an initial fetch to populate UI instantly
     fetchState();
-    const interval = setInterval(fetchState, 2000);
-    return () => clearInterval(interval);
+
+    let ws: WebSocket | null = null;
+    let reconnectTimeout: ReturnType<typeof setTimeout>;
+    let isComponentMounted = true;
+    let reconnectAttempt = 0;
+    const baseDelayMs = 1000;
+    const maxDelayMs = 10000;
+
+    const connectWebSocket = () => {
+      ws = new WebSocket(`${baseWsUrl}/ws/state`);
+
+      ws.onopen = () => {
+        reconnectAttempt = 0; // Reset on successful connect
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data);
+          if (payload.stats) {
+            setStats(payload.stats);
+          }
+          if (payload.trades) {
+            setActiveTrades(payload.trades.active);
+            setHistoryTrades(payload.trades.history.reverse());
+          }
+        } catch (err) {
+          console.error("Failed to parse state WS message:", err);
+        }
+      };
+
+      ws.onerror = (error) => {
+        console.error("State WebSocket error:", error);
+      };
+
+      ws.onclose = () => {
+        if (isComponentMounted) {
+          const delay = Math.min(maxDelayMs, baseDelayMs * Math.pow(2, reconnectAttempt));
+          const jitter = Math.random() * baseDelayMs; // Add jitter
+          const totalDelay = delay + jitter;
+          console.log(`State WebSocket closed, attempting to reconnect in ${totalDelay.toFixed(0)}ms...`);
+          reconnectTimeout = setTimeout(connectWebSocket, totalDelay);
+          reconnectAttempt++;
+        }
+      };
+    };
+
+    connectWebSocket();
+
+    return () => {
+      isComponentMounted = false;
+      clearTimeout(reconnectTimeout);
+      if (ws) {
+        ws.close();
+      }
+    };
   }, []);
 
   const handleControlAction = async (action: string) => {
     setLoading(true);
     try {
-      await fetch('http://localhost:8000/api/control', {
+      await fetch(`${baseUrl}/api/control`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action }),
