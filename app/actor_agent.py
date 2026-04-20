@@ -204,8 +204,8 @@ class ActorAgent:
                 elif direction == "SHORT" and current_price >= liq_price:
                     trades_to_close.append(trade_id)
 
-        for trade_id in trades_to_close:
-            await self.close_trade(trade_id, current_price, liquidation=True)
+        if trades_to_close:
+            await asyncio.gather(*[self.close_trade(tid, current_price, liquidation=True) for tid in trades_to_close])
 
     def update_mdd(self, current_wallet_value: float):
         if current_wallet_value > self.peak_wallet:
