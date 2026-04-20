@@ -23,9 +23,9 @@ export default function StrategyAnalysisPanel() {
     return analysis.text.split('\n').map((line, i) => {
       if (!line.trim()) return <br key={i} />;
       let color = "text-slate-300";
-      if (line.includes("Bullish") || line.includes("Favorable")) color = "text-emerald-400";
-      if (line.includes("Bearish") || line.includes("Caution")) color = "text-rose-400";
-      if (line.includes("Recommendation:")) return <p key={i} className={`mt-2 font-bold ${color}`}>{line}</p>;
+      if (/bullish|favorable/i.test(line)) color = "text-emerald-400";
+      if (/bearish|caution/i.test(line)) color = "text-rose-400";
+      if (/recommendation:/i.test(line)) return <p key={i} className={"mt-2 font-bold " + color}>{line}</p>;
       return <p key={i} className={color}>{line}</p>;
     });
   }, [analysis?.text]);
