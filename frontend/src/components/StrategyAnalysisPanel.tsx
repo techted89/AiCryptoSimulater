@@ -19,7 +19,7 @@ export default function StrategyAnalysisPanel() {
   const [analysis, setAnalysis] = useState<AnalysisData | null>(null);
 
   const analysisLines = useMemo(() => {
-    if (!analysis) return null;
+    if (!analysis?.text) return null;
     return analysis.text.split('\n').map((line, i) => {
       if (!line.trim()) return <br key={i} />;
       let color = "text-slate-300";
