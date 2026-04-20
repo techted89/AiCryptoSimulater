@@ -185,7 +185,7 @@ class ActorAgent:
 
         trade["exit_price"] = exit_price
         trade["exit_fee_usd"] = exit_fee
-        trade["pnl"] = pnl - exit_fee # Total PnL includes fees
+        trade["pnl"] = pnl - exit_fee - trade["fee_usd"] # Total PnL includes all fees
         trade["status"] = "liquidated" if liquidation else "closed"
 
         self.mock_trades.append(trade)
