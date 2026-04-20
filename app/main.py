@@ -2,6 +2,7 @@ import asyncio
 import json
 import os
 import time
+import random
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse
@@ -52,11 +53,19 @@ async def background_redis_listener():
                 latest_market_state["price"] = data.get("price", 65000.0)
                 latest_market_state["rsi"] = data.get("rsi", 50.0)
 
-                # Mock automated trading logic: Occasionally close trades randomly to simulate trading flow
-                if actor_agent.open_positions and time.time() % 10 < 1:
-                    trade_id = list(actor_agent.open_positions.keys())[0]
-                    # We must await async functions now
-                    await actor_agent.close_trade(trade_id, latest_market_state["price"])
+                # Mock automated trading logic: Occasionally execute/close trades randomly to simulate trading flow
+                if time.time() % 10 < 1:
+                    if actor_agent.open_positions and random.random() > 0.5:
+                        trade_id = list(actor_agent.open_positions.keys())[0]
+                        await actor_agent.close_trade(trade_id, latest_market_state["price"])
+                    elif random.random() > 0.5:
+                        conf = await run_in_threadpool(
+                            research_agent.analyze_current_state,
+                            "BTC",
+                            latest_market_state["price"],
+                            latest_market_state["rsi"]
+                        )
+                        await actor_agent.execute_trade("BTC", latest_market_state["price"], conf)
 
     except Exception as e:
         print(f"Background Redis Error: {e}")
