@@ -53,22 +53,35 @@ async def background_redis_listener():
                 latest_market_state["price"] = data.get("price", 65000.0)
                 latest_market_state["rsi"] = data.get("rsi", 50.0)
 
-                # Mock automated trading logic: Occasionally execute/close trades randomly to simulate trading flow
-                if time.time() % 10 < 1:
-                    if actor_agent.open_positions and random.random() > 0.5:
-                        trade_id = list(actor_agent.open_positions.keys())[0]
-                        await actor_agent.close_trade(trade_id, latest_market_state["price"])
-                    elif random.random() > 0.5:
-                        conf = await run_in_threadpool(
-                            research_agent.analyze_current_state,
-                            "BTC",
-                            latest_market_state["price"],
-                            latest_market_state["rsi"]
-                        )
-                        await actor_agent.execute_trade("BTC", latest_market_state["price"], conf)
+                # Autonomous Trading Control
+                dxy = data.get("macro", {}).get("dxy", 104.0)
+                sp500 = data.get("macro", {}).get("sp500", 5200.0)
+                news = data.get("news_sentiment", "Neutral")
+                l2_book = data.get("order_book", None)
+                macd = data.get("macd", 0.0)
+
+                # Evaluate exits autonomously
+                await actor_agent.evaluate_exits(latest_market_state["price"], l2_book)
+
+                # Analyze and execute entries autonomously
+                # Throttle entries
+                if len(actor_agent.open_positions) < 3 and random.random() > 0.8:
+                    conf = await research_agent.analyze_current_state(
+                        "BTC",
+                        latest_market_state["price"],
+                        latest_market_state["rsi"],
+                        dxy,
+                        sp500,
+                        news,
+                        l2_book,
+                        macd
+                    )
+                    await actor_agent.execute_trade("BTC", latest_market_state["price"], conf, l2_book)
 
     except Exception as e:
+        import traceback
         print(f"Background Redis Error: {e}")
+        traceback.print_exc()
     finally:
         await pubsub.unsubscribe("crypto_prices")
         await r.close()
@@ -244,6 +257,21 @@ async def get_analysis():
 async def get_thoughts():
     return {"thoughts": research_agent.thought_log}
 
+
+class KeysRequest(BaseModel):
+    actor_key: str
+    researcher_key: str
+    groq_key: str = ""
+
+@app.post("/api/keys")
+async def set_keys(req: KeysRequest):
+    os.environ["GEMINI_API_KEY_ACTOR"] = req.actor_key
+    os.environ["GEMINI_API_KEY_RESEARCHER"] = req.researcher_key
+    if req.groq_key:
+        os.environ["GROQ_API_KEY"] = req.groq_key
+    return {"status": "success", "message": "API keys updated"}
+
+
 class ControlRequest(BaseModel):
     action: str
 
@@ -265,8 +293,7 @@ async def admin_control(req: ControlRequest):
         # Manually trigger a mock trade from the backend for demonstration
         # First trigger research agent analysis to populate thought log
         # Offload synchronous ChromaDB call to threadpool to prevent blocking the event loop
-        conf = await run_in_threadpool(
-            research_agent.analyze_current_state,
+        conf = await research_agent.analyze_current_state(
             "BTC",
             latest_market_state["price"],
             latest_market_state["rsi"]

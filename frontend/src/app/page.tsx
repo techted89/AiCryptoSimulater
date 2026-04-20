@@ -38,6 +38,10 @@ export default function Home() {
   const [activeTrades, setActiveTrades] = useState<Trade[]>([]);
   const [historyTrades, setHistoryTrades] = useState<Trade[]>([]);
   const [loading, setLoading] = useState(false);
+  const [actorKey, setActorKey] = useState('');
+  const [researcherKey, setResearcherKey] = useState('');
+  const [groqKey, setGroqKey] = useState('');
+  const [keysSaved, setKeysSaved] = useState(false);
 
   // Determine dynamic base URLs for the backend API and WS
   const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
@@ -118,6 +122,24 @@ export default function Home() {
       }
     };
   }, []);
+
+
+  const handleSaveKeys = async () => {
+    setLoading(true);
+    try {
+      await fetch(`${baseUrl}/api/keys`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ actor_key: actorKey, researcher_key: researcherKey, groq_key: groqKey }),
+      });
+      setKeysSaved(true);
+      setTimeout(() => setKeysSaved(false), 3000);
+    } catch (err) {
+      console.error('Failed to save keys:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleControlAction = async (action: string) => {
     setLoading(true);
@@ -208,12 +230,47 @@ export default function Home() {
               </div>
             </div>
 
+
             {/* Admin Controls */}
             <div className="bg-slate-900 p-6 rounded-xl border border-slate-800 shadow-lg border-l-4 border-l-rose-500">
               <h2 className="text-lg font-semibold text-white mb-4 flex items-center">
                 God Mode Controls
               </h2>
+
+              <div className="space-y-3 mb-6 border-b border-slate-800 pb-4">
+                <h3 className="text-sm font-semibold text-slate-300">Gemini API Keys</h3>
+                <input
+                  type="password"
+                  placeholder="Actor Agent Key"
+                  value={actorKey}
+                  onChange={(e) => setActorKey(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 text-slate-300 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500"
+                />
+                <input
+                  type="password"
+                  placeholder="Researcher Agent Key"
+                  value={researcherKey}
+                  onChange={(e) => setResearcherKey(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 text-slate-300 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500"
+                />
+                <input
+                  type="password"
+                  placeholder="Groq API Key (Actor Fallback)"
+                  value={groqKey}
+                  onChange={(e) => setGroqKey(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 text-slate-300 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500"
+                />
+                <button
+                  onClick={handleSaveKeys}
+                  disabled={loading}
+                  className="w-full flex items-center justify-center space-x-2 bg-emerald-600 hover:bg-emerald-700 text-white py-2 rounded-lg font-medium text-sm transition-colors disabled:opacity-50"
+                >
+                  <span>{keysSaved ? 'Saved!' : 'Save Keys'}</span>
+                </button>
+              </div>
+
               <div className="space-y-3">
+
                 <div className="grid grid-cols-2 gap-3">
                   <button
                     onClick={() => handleControlAction('trigger_trade')}
