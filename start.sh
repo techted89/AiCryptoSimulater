@@ -8,8 +8,14 @@ echo "========================================="
 # Terminate all background processes on script exit
 trap "echo 'Stopping all services...'; kill 0" EXIT
 
+echo "Checking Redis..."
+if ! redis-cli ping >/dev/null 2>&1; then
+    echo "Redis is not running. Start Redis before running ./start.sh."
+    exit 1
+fi
+
 echo "Starting Backend API..."
-uvicorn app.main:app --reload --port 8000 &
+uvicorn app.main:app --port 8000 &
 
 echo "Starting Data Ingestor..."
 python app/ingestor.py &
