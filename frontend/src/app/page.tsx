@@ -46,7 +46,7 @@ export default function Home() {
   // Determine dynamic base URLs for the backend API and WS
   const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
   const baseWsUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8000';
-  const adminToken = process.env.NEXT_PUBLIC_ADMIN_TOKEN || 'super-secret-admin-token';
+  const adminToken = process.env.NEXT_PUBLIC_ADMIN_TOKEN;
 
   const fetchState = async () => {
     try {
@@ -127,11 +127,18 @@ export default function Home() {
 
 
   const handleSaveKeys = async () => {
+    if (!adminToken) {
+      console.error('Admin token not configured');
+      return;
+    }
     setLoading(true);
     try {
       const response = await fetch(`${baseUrl}/api/keys`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Admin-Token': adminToken
+        },
         body: JSON.stringify({ actor_key: actorKey, researcher_key: researcherKey, groq_key: groqKey }),
       });
       if (response.ok) {
@@ -240,73 +247,84 @@ export default function Home() {
 
 
             {/* Admin Controls */}
-            <div className="bg-slate-900 p-6 rounded-xl border border-slate-800 shadow-lg border-l-4 border-l-rose-500">
-              <h2 className="text-lg font-semibold text-white mb-4 flex items-center">
-                God Mode Controls
-              </h2>
+            {adminToken ? (
+              <div className="bg-slate-900 p-6 rounded-xl border border-slate-800 shadow-lg border-l-4 border-l-rose-500">
+                <h2 className="text-lg font-semibold text-white mb-4 flex items-center">
+                  God Mode Controls
+                </h2>
 
-              <div className="space-y-3 mb-6 border-b border-slate-800 pb-4">
-                <h3 className="text-sm font-semibold text-slate-300">Gemini API Keys</h3>
-                <input
-                  type="password"
-                  placeholder="Actor Agent Key"
-                  value={actorKey}
-                  onChange={(e) => setActorKey(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 text-slate-300 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500"
-                />
-                <input
-                  type="password"
-                  placeholder="Researcher Agent Key"
-                  value={researcherKey}
-                  onChange={(e) => setResearcherKey(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 text-slate-300 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500"
-                />
-                <input
-                  type="password"
-                  placeholder="Groq API Key (Actor Fallback)"
-                  value={groqKey}
-                  onChange={(e) => setGroqKey(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 text-slate-300 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500"
-                />
-                <button
-                  onClick={handleSaveKeys}
-                  disabled={loading}
-                  className="w-full flex items-center justify-center space-x-2 bg-emerald-600 hover:bg-emerald-700 text-white py-2 rounded-lg font-medium text-sm transition-colors disabled:opacity-50"
-                >
-                  <span>{keysSaved ? 'Saved!' : 'Save Keys'}</span>
-                </button>
-              </div>
-
-              <div className="space-y-3">
-
-                <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-3 mb-6 border-b border-slate-800 pb-4">
+                  <h3 className="text-sm font-semibold text-slate-300">Gemini API Keys</h3>
+                  <input
+                    type="password"
+                    placeholder="Actor Agent Key"
+                    value={actorKey}
+                    onChange={(e) => setActorKey(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 text-slate-300 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500"
+                  />
+                  <input
+                    type="password"
+                    placeholder="Researcher Agent Key"
+                    value={researcherKey}
+                    onChange={(e) => setResearcherKey(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 text-slate-300 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500"
+                  />
+                  <input
+                    type="password"
+                    placeholder="Groq API Key (Actor Fallback)"
+                    value={groqKey}
+                    onChange={(e) => setGroqKey(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 text-slate-300 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500"
+                  />
                   <button
-                    onClick={() => handleControlAction('trigger_trade')}
+                    onClick={handleSaveKeys}
                     disabled={loading}
-                    className="w-full flex items-center justify-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg font-medium text-sm transition-colors disabled:opacity-50"
+                    className="w-full flex items-center justify-center space-x-2 bg-emerald-600 hover:bg-emerald-700 text-white py-2 rounded-lg font-medium text-sm transition-colors disabled:opacity-50"
                   >
-                    <Zap className="w-4 h-4" />
-                    <span>Force Entry</span>
-                  </button>
-                  <button
-                    onClick={() => handleControlAction('close_trade')}
-                    disabled={loading || activeTrades.length === 0}
-                    className="w-full flex items-center justify-center space-x-2 bg-orange-600 hover:bg-orange-700 text-white py-3 rounded-lg font-medium text-sm transition-colors disabled:opacity-50"
-                  >
-                    <XCircle className="w-4 h-4" />
-                    <span>Force Exit</span>
+                    <span>{keysSaved ? 'Saved!' : 'Save Keys'}</span>
                   </button>
                 </div>
-                <button
-                  onClick={() => handleControlAction('reset_wallet')}
-                  disabled={loading}
-                  className="w-full flex items-center justify-center space-x-2 bg-slate-800 hover:bg-slate-700 text-rose-400 border border-slate-700 py-3 rounded-lg font-medium transition-colors disabled:opacity-50"
-                >
-                  <RefreshCw className="w-4 h-4" />
-                  <span>Reset Wallet Balance</span>
-                </button>
+
+                <div className="space-y-3">
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      onClick={() => handleControlAction('trigger_trade')}
+                      disabled={loading}
+                      className="w-full flex items-center justify-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg font-medium text-sm transition-colors disabled:opacity-50"
+                    >
+                      <Zap className="w-4 h-4" />
+                      <span>Force Entry</span>
+                    </button>
+                    <button
+                      onClick={() => handleControlAction('close_trade')}
+                      disabled={loading || activeTrades.length === 0}
+                      className="w-full flex items-center justify-center space-x-2 bg-orange-600 hover:bg-orange-700 text-white py-3 rounded-lg font-medium text-sm transition-colors disabled:opacity-50"
+                    >
+                      <XCircle className="w-4 h-4" />
+                      <span>Force Exit</span>
+                    </button>
+                  </div>
+                  <button
+                    onClick={() => handleControlAction('reset_wallet')}
+                    disabled={loading}
+                    className="w-full flex items-center justify-center space-x-2 bg-slate-800 hover:bg-slate-700 text-rose-400 border border-slate-700 py-3 rounded-lg font-medium transition-colors disabled:opacity-50"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                    <span>Reset Wallet Balance</span>
+                  </button>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="bg-slate-900 p-6 rounded-xl border border-slate-800 shadow-lg border-l-4 border-l-slate-600">
+                <h2 className="text-lg font-semibold text-slate-400 mb-4">
+                  Admin Controls Unavailable
+                </h2>
+                <p className="text-slate-500 text-sm">
+                  Admin token not configured. Set NEXT_PUBLIC_ADMIN_TOKEN environment variable to enable controls.
+                </p>
+              </div>
+            )}
 
             {/* Active & Recent Trades */}
             <div className="bg-slate-900 p-6 rounded-xl border border-slate-800 shadow-lg h-[350px] overflow-hidden flex flex-col">

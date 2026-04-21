@@ -16,13 +16,8 @@ cleanup() {
 trap cleanup SIGINT SIGTERM EXIT
 
 echo "Cleaning up lingering ports before starting..."
-kill $(lsof -t -i :3000) 2>/dev/null || true
-kill $(lsof -t -i :8000) 2>/dev/null || true
-kill $(lsof -t -i :3001) 2>/dev/null || true
-kill $(lsof -t -i :3002) 2>/dev/null || true
-
-}
-trap cleanup SIGINT SIGTERM EXIT
+lsof -t -i :3000 2>/dev/null | xargs -r kill || true
+lsof -t -i :8000 2>/dev/null | xargs -r kill || true
 
 echo "========================================="
 echo " Starting AI Crypto Trading Simulator    "
