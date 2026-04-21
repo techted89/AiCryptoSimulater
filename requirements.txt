@@ -6,5 +6,5 @@ websockets
 pysqlite3-binary
 prometheus-client
 optuna
-aiohttp==3.9.5
-google-genai==0.2.2
+aiohttp==3.10.0
+google-genai==0.3.0
