@@ -9,8 +9,16 @@ cleanup() {
             kill "$PID" || true
         fi
     done
+    pkill -f "uvicorn app.main:app" || true
+    pkill -f "next" || true
+    pkill -f "app/ingestor.py" || true
 }
 trap cleanup SIGINT SIGTERM EXIT
+
+echo "Cleaning up lingering ports before starting..."
+lsof -t -i :3000 | xargs -r kill -9 || true
+lsof -t -i :8000 | xargs -r kill -9 || true
+
 
 echo "========================================="
 echo " Starting AI Crypto Trading Simulator    "
@@ -27,15 +35,15 @@ echo "Setting environment variables..."
 export OLLAMA_BASE_URL="http://localhost:11434"
 
 echo "Starting Backend API..."
-uvicorn app.main:app --port 8000 &
+uvicorn app.main:app --port 8000 > backend.log 2>&1 &
 PIDS+=($!)
 
 echo "Starting Data Ingestor..."
-python app/ingestor.py &
+python app/ingestor.py > ingestor.log 2>&1 &
 PIDS+=($!)
 
 echo "Starting Frontend..."
-(cd frontend && npm run dev) &
+(cd frontend && npm run dev) > frontend.log 2>&1 &
 PIDS+=($!)
 
 echo "========================================="
