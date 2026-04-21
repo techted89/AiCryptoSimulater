@@ -46,6 +46,7 @@ export default function Home() {
   // Determine dynamic base URLs for the backend API and WS
   const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
   const baseWsUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8000';
+  const adminToken = process.env.NEXT_PUBLIC_ADMIN_TOKEN || 'super-secret-admin-token';
 
   const fetchState = async () => {
     try {
@@ -130,7 +131,10 @@ export default function Home() {
     try {
       const response = await fetch(`${baseUrl}/api/keys`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Admin-Token': adminToken
+        },
         body: JSON.stringify({ actor_key: actorKey, researcher_key: researcherKey, groq_key: groqKey }),
       });
       if (response.ok) {
