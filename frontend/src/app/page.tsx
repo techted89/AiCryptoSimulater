@@ -21,6 +21,9 @@ interface AgentStats {
 interface Trade {
   id: string;
   symbol: string;
+  direction?: string;
+  leverage?: number;
+  liquidation_price?: number;
   quoted_price?: number;
   entry_price: number;
   exit_price?: number;
@@ -28,6 +31,7 @@ interface Trade {
   fee_usd?: number;
   exit_fee_usd?: number;
   amount_usd: number;
+  notional_usd?: number;
   pnl?: number;
   confidence: number;
   status: string;
@@ -39,13 +43,17 @@ export default function Home() {
   const [historyTrades, setHistoryTrades] = useState<Trade[]>([]);
   const [loading, setLoading] = useState(false);
 
+  // Determine dynamic base URLs for the backend API and WS
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+  const baseWsUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8000';
+
   const fetchState = async () => {
     try {
-      const statsRes = await fetch('http://localhost:8000/api/stats');
+      const statsRes = await fetch(`${baseUrl}/api/stats`);
       const statsData = await statsRes.json();
       setStats(statsData);
 
-      const tradesRes = await fetch('http://localhost:8000/api/trades');
+      const tradesRes = await fetch(`${baseUrl}/api/trades`);
       const tradesData = await tradesRes.json();
       setActiveTrades(tradesData.active);
       setHistoryTrades(tradesData.history.reverse()); // Newest closed first
@@ -54,17 +62,71 @@ export default function Home() {
     }
   };
 
-  // Poll for state every 2 seconds
+  // Connect to the state WebSocket
   useEffect(() => {
+    // Perform an initial fetch to populate UI instantly
     fetchState();
-    const interval = setInterval(fetchState, 2000);
-    return () => clearInterval(interval);
+
+    let ws: WebSocket | null = null;
+    let reconnectTimeout: ReturnType<typeof setTimeout>;
+    let isComponentMounted = true;
+    let reconnectAttempt = 0;
+    const baseDelayMs = 1000;
+    const maxDelayMs = 10000;
+
+    const connectWebSocket = () => {
+      ws = new WebSocket(`${baseWsUrl}/ws/state`);
+
+      ws.onopen = () => {
+        reconnectAttempt = 0; // Reset on successful connect
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data);
+          if (payload.stats) {
+            setStats(payload.stats);
+          }
+          if (payload.trades) {
+            setActiveTrades(payload.trades.active);
+            setHistoryTrades(payload.trades.history.reverse());
+          }
+        } catch (err) {
+          console.error("Failed to parse state WS message:", err);
+        }
+      };
+
+      ws.onerror = (error) => {
+        console.error("State WebSocket error:", error);
+      };
+
+      ws.onclose = () => {
+        if (isComponentMounted) {
+          const delay = Math.min(maxDelayMs, baseDelayMs * Math.pow(2, reconnectAttempt));
+          const jitter = Math.random() * baseDelayMs; // Add jitter
+          const totalDelay = delay + jitter;
+          console.log(`State WebSocket closed, attempting to reconnect in ${totalDelay.toFixed(0)}ms...`);
+          reconnectTimeout = setTimeout(connectWebSocket, totalDelay);
+          reconnectAttempt++;
+        }
+      };
+    };
+
+    connectWebSocket();
+
+    return () => {
+      isComponentMounted = false;
+      clearTimeout(reconnectTimeout);
+      if (ws) {
+        ws.close();
+      }
+    };
   }, []);
 
   const handleControlAction = async (action: string) => {
     setLoading(true);
     try {
-      await fetch('http://localhost:8000/api/control', {
+      await fetch(`${baseUrl}/api/control`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action }),
@@ -194,19 +256,29 @@ export default function Home() {
                 {activeTrades.length > 0 && (
                   <div className="space-y-2">
                     <h3 className="text-xs text-slate-400 uppercase tracking-wider font-semibold border-b border-slate-800 pb-1">Active Positions ({activeTrades.length})</h3>
-                    {activeTrades.map((trade) => (
-                      <div key={trade.id} className="bg-slate-950 p-3 rounded-lg border border-blue-900/50 relative overflow-hidden text-sm">
-                        <div className="absolute top-0 left-0 w-1 h-full bg-blue-500 animate-pulse"></div>
-                        <div className="flex justify-between items-center mb-1 pl-2">
-                          <span className="font-semibold text-blue-400">{trade.symbol} <span className="text-xs text-slate-500 ml-1">OPEN</span></span>
-                          <span className="text-xs text-slate-400">Entry: ${trade.entry_price.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits:2})}</span>
+                    {activeTrades.map((trade) => {
+                      const isLong = trade.direction === "LONG";
+                      const colorClass = isLong ? "text-emerald-400" : "text-rose-400";
+                      const borderClass = isLong ? "border-emerald-900/50" : "border-rose-900/50";
+                      const bgClass = isLong ? "bg-emerald-500" : "bg-rose-500";
+
+                      return (
+                        <div key={trade.id} className={`bg-slate-950 p-3 rounded-lg border ${borderClass} relative overflow-hidden text-sm`}>
+                          <div className={`absolute top-0 left-0 w-1 h-full ${bgClass} animate-pulse`}></div>
+                          <div className="flex justify-between items-center mb-1 pl-2">
+                            <span className={`font-semibold ${colorClass}`}>
+                              {trade.symbol}
+                              <span className="text-xs ml-1 bg-slate-800 px-1 py-0.5 rounded">{trade.direction || "LONG"} {trade.leverage || 1}x</span>
+                            </span>
+                            <span className="text-xs text-slate-400">Entry: ${trade.entry_price.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits:2})}</span>
+                          </div>
+                          <div className="flex justify-between text-slate-500 text-[10px] pl-2 mt-1 border-t border-slate-800 pt-1">
+                            <span>Liq: ${trade.liquidation_price?.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits:2}) || '---'}</span>
+                            <span>Margin: ${trade.amount_usd.toFixed(2)}</span>
+                          </div>
                         </div>
-                        <div className="flex justify-between text-slate-500 text-[10px] pl-2 mt-1 border-t border-slate-800 pt-1">
-                          <span>Fee: ${trade.fee_usd?.toFixed(2)}</span>
-                          <span>Slip: {trade.slippage_pct ? (trade.slippage_pct*100).toFixed(3) : '0'}%</span>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
 
@@ -217,11 +289,14 @@ export default function Home() {
                     <p className="text-slate-500 text-xs text-center mt-4">No closed trades.</p>
                   ) : (
                     historyTrades.map((trade) => (
-                      <div key={trade.id} className="bg-slate-950 p-3 rounded-lg border border-slate-800 text-sm">
+                      <div key={trade.id} className={`bg-slate-950 p-3 rounded-lg border ${trade.status === 'liquidated' ? 'border-rose-900/80' : 'border-slate-800'} text-sm`}>
                         <div className="flex justify-between items-center mb-1">
-                          <span className="font-semibold text-slate-300">{trade.symbol}</span>
-                          <span className={`px-2 py-0.5 rounded text-[10px] uppercase tracking-wider font-bold ${trade.pnl && trade.pnl > 0 ? 'bg-emerald-900/50 text-emerald-400' : 'bg-rose-900/50 text-rose-400'}`}>
-                            {trade.pnl && trade.pnl > 0 ? 'WIN' : 'LOSS'}
+                          <span className="font-semibold text-slate-300">
+                            {trade.symbol}
+                            <span className="text-xs ml-1 bg-slate-800 px-1 py-0.5 rounded text-slate-400">{trade.direction || "LONG"} {trade.leverage || 1}x</span>
+                          </span>
+                          <span className={`px-2 py-0.5 rounded text-[10px] uppercase tracking-wider font-bold ${trade.status === 'liquidated' ? 'bg-rose-900/80 text-white' : (trade.pnl && trade.pnl > 0 ? 'bg-emerald-900/50 text-emerald-400' : 'bg-rose-900/50 text-rose-400')}`}>
+                            {trade.status === 'liquidated' ? 'LIQUIDATED' : (trade.pnl && trade.pnl > 0 ? 'WIN' : 'LOSS')}
                           </span>
                         </div>
                         <div className="flex justify-between text-slate-400 text-xs">
@@ -229,7 +304,7 @@ export default function Home() {
                           <span>Out: ${trade.exit_price?.toLocaleString(undefined, {maximumFractionDigits:2})}</span>
                         </div>
                         <div className="flex justify-between mt-2 text-xs border-t border-slate-800 pt-1">
-                           <span className="text-slate-500">Fees: ${(trade.fee_usd! + (trade.exit_fee_usd || 0)).toFixed(2)}</span>
+                           <span className="text-slate-500">Margin: ${trade.amount_usd.toFixed(2)}</span>
                            <span className={`font-bold ${trade.pnl && trade.pnl >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
                              {trade.pnl && trade.pnl >= 0 ? '+' : ''}{trade.pnl?.toFixed(2)}
                            </span>

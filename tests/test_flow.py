@@ -32,7 +32,9 @@ async def test_flow():
     trade_result = await actor_agent.execute_trade(
         test_tick["symbol"],
         test_tick["price"],
-        confidence
+        confidence["confidence"],
+        direction=confidence["direction"],
+        leverage=1.0
     )
     print(f"Actor Agent Trade Result: {trade_result}")
 
