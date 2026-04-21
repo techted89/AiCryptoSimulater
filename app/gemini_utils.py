@@ -5,10 +5,13 @@ import logging
 
 
 _gemini_client = None
+_gemini_api_key = None
+
 def _get_gemini_client(api_key):
-    global _gemini_client
-    if _gemini_client is None:
+    global _gemini_client, _gemini_api_key
+    if _gemini_client is None or _gemini_api_key != api_key:
         _gemini_client = genai.Client(api_key=api_key)
+        _gemini_api_key = api_key
     return _gemini_client
 
 
@@ -26,11 +29,11 @@ async def call_gemini_with_retry(api_key: str, prompt: str, max_retries: int = 3
         except APIError as e:
             if "429" in str(e) or "Resource Exhausted" in str(e):
                 if attempt < max_retries - 1:
-                    print(f"Gemini API rate limit exceeded. Retrying in {delay} seconds...")
+                    logging.warning(f"Gemini API rate limit exceeded. Retrying in {delay} seconds...")
                     await asyncio.sleep(delay)
                     delay *= 2  # Exponential backoff
                 else:
-                    print("Gemini API rate limit exceeded. Max retries reached.")
+                    logging.warning("Gemini API rate limit exceeded. Max retries reached.")
                     return "Error: Rate limit exceeded (429). Falling back to algorithmic analysis."
             else:
                 logging.exception("Full Gemini API error")
