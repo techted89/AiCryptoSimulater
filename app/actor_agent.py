@@ -2,6 +2,11 @@ import uuid
 
 import random
 import asyncio
+import aiohttp
+import traceback
+
+import os
+
 
 class ActorAgent:
     def __init__(self, initial_balance=10000.0):
@@ -34,8 +39,69 @@ class ActorAgent:
                 pos["funding_fees_paid"] = 0.0
             pos["funding_fees_paid"] += funding_fee
 
-    async def execute_trade(self, symbol: str, price: float, confidence_score: float, direction: str = "LONG", leverage: float = 1.0, l2_book: dict = None, total_wallet_value: float = None) -> dict:
-        """Executes a mock futures trade with direction, leverage, latency simulation, L2-based slippage, and fees."""
+
+    async def evaluate_exits(self, current_price: float, l2_book: dict = None):
+        """Autonomously decides when to close trades based on profit targets, stop loss, or LLM analysis."""
+        trades_to_close = []
+        positions = list(self.open_positions.items())
+        for trade_id, trade in positions:
+            entry_price = trade["entry_price"]
+            pnl_pct = (current_price - entry_price) / entry_price
+
+            # Default algorithmic fallback
+            should_close = False
+            if pnl_pct > 0.02 or pnl_pct < -0.01:
+                should_close = True
+
+            # Hybrid Local/Cloud LLM Evaluation only if neutral band
+            if not should_close and -0.01 <= pnl_pct <= 0.02:
+                prompt = f"Trade ID: {trade_id}\nSymbol: {trade['symbol']}\nEntry Price: {entry_price}\nCurrent Price: {current_price}\nPnL: {pnl_pct*100:.2f}%\n\nShould I CLOSE this trade or HOLD? Respond strictly with 'CLOSE' or 'HOLD'."
+
+                try:
+                    async with aiohttp.ClientSession() as session:
+                        async with session.post(
+                            f"{os.environ.get('OLLAMA_BASE_URL', 'http://localhost:11434')}/v1/chat/completions",
+                            json={"model": "llama3.2:1b", "messages": [{"role": "user", "content": prompt}]},
+                            timeout=aiohttp.ClientTimeout(total=2.0)
+                        ) as res:
+                            if res.status == 200:
+                                data = await res.json()
+                                ans = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+                                if "CLOSE" in ans.upper():
+                                    should_close = True
+                                print("Evaluated exit using Local Ollama")
+                            else:
+                                raise Exception("Ollama error")
+                except Exception as e:
+                    # Fallback to Groq
+                    groq_key = os.environ.get("GROQ_API_KEY")
+                    if groq_key:
+                        try:
+                            headers = {"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"}
+                            async with aiohttp.ClientSession() as session:
+                                async with session.post(
+                                    "https://api.groq.com/openai/v1/chat/completions",
+                                    headers=headers,
+                                    json={"model": "llama3-8b-8192", "messages": [{"role": "user", "content": prompt}]},
+                                    timeout=aiohttp.ClientTimeout(total=2.0)
+                                ) as res:
+                                    if res.status == 200:
+                                        data = await res.json()
+                                        ans = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+                                        if "CLOSE" in ans.upper():
+                                            should_close = True
+                                        print("Evaluated exit using Fallback Groq")
+                        except Exception as e:
+                            print("Both LLM calls failed. Falling back to algorithmic analysis.")
+
+            if should_close:
+                trades_to_close.append(trade_id)
+
+        for trade_id in trades_to_close:
+            await self.close_trade(trade_id, current_price, l2_book)
+
+    async def execute_trade(self, symbol: str, price: float, confidence_score: float, l2_book: dict = None, total_wallet_value: float = None) -> dict:
+        """Executes a mock trade with latency simulation, L2-based slippage, and fees."""
         if self.circuit_breaker_active:
              return {"status": "rejected", "reason": "Circuit Breaker Active"}
 
@@ -46,31 +112,39 @@ class ActorAgent:
         if total_wallet_value is None:
             total_wallet_value = self.balance
 
-        # Cap at 5% of wallet value to pass risk checks for initial margin
-        margin_fraction = min(0.05, confidence_score * 0.05)
-        initial_margin = total_wallet_value * margin_fraction
+        # Cap at 5% of wallet value to pass risk checks
+        trade_fraction = min(0.05, confidence_score * 0.05)
+        trade_amount = total_wallet_value * trade_fraction
 
-        notional_value = initial_margin * leverage
 
-        if initial_margin < 10.0 or (initial_margin + (initial_margin * leverage * 0.001)) > self.balance:
+        if trade_amount < 10.0 or trade_amount > self.balance:
             return {"status": "skipped", "reason": "Trade amount invalid"}
 
-        if not self.check_risk(initial_margin, total_wallet_value):
+        # Minimum Expected Gain (MEG) Check
+        target_price = price * 1.02 # mock expected 2% gain
+        fees_and_slip = (trade_amount * 0.001) + (trade_amount * 0.0005) # est
+        expected_profit = (target_price - price) * (trade_amount / price)
+        if expected_profit < fees_and_slip + 2.0:
+            return {"status": "skipped", "reason": "MEG not met, fees too high"}
+
+        if not self.check_risk(trade_amount, total_wallet_value):
+
             return {"status": "rejected", "reason": "Risk check failed"}
 
         # Advanced Realism: L2 Order Book Slippage Calculation
-        if l2_book and ((direction == "LONG" and "asks" in l2_book) or (direction == "SHORT" and "bids" in l2_book)):
-            book_side = "asks" if direction == "LONG" else "bids"
-            remaining_usd = notional_value
+        if l2_book and "asks" in l2_book:
+            # Calculate depth-weighted average price (DWAP)
+            # We are buying, so we eat into the 'asks'
+            remaining_usd = trade_amount
             total_tokens_bought = 0.0
             vwap_sum = 0.0
 
-            for price_level, vol in l2_book[book_side]:
+            for ask_price, ask_vol in l2_book["asks"]:
                 if remaining_usd <= 0:
                     break
-                available_usd_at_level = price_level * vol
+                available_usd_at_level = ask_price * ask_vol
                 usd_to_take = min(remaining_usd, available_usd_at_level)
-                tokens_to_take = usd_to_take / price_level
+                tokens_to_take = usd_to_take / ask_price
 
                 total_tokens_bought += tokens_to_take
                 vwap_sum += usd_to_take
@@ -78,41 +152,31 @@ class ActorAgent:
 
             if total_tokens_bought > 0:
                 entry_price = vwap_sum / total_tokens_bought
-                slippage_pct = abs(entry_price - price) / price
+                slippage_pct = (entry_price - price) / price
             else:
                 slippage_pct = random.uniform(0.0001, 0.0005)
-                entry_price = price * (1 + slippage_pct) if direction == "LONG" else price * (1 - slippage_pct)
+                entry_price = price * (1 + slippage_pct)
         else:
             # Fallback if no L2 book provided
             slippage_pct = random.uniform(0.0001, 0.0005)
-            entry_price = price * (1 + slippage_pct) if direction == "LONG" else price * (1 - slippage_pct)
+            entry_price = price * (1 + slippage_pct)
 
-        # Fee: 0.1% typical taker fee on notional value
-        fee_usd = notional_value * 0.001
+        # Fee: 0.1% typical taker fee
+        fee_usd = trade_amount * 0.001
+        capital_deployed = trade_amount - fee_usd
 
-        self.balance -= initial_margin
-        self.balance -= fee_usd # Deduct fee upfront
+        self.balance -= trade_amount
         trade_id = str(uuid.uuid4())
-
-        # Calculate liquidation price
-        if direction == "LONG":
-            liquidation_price = entry_price * (1 - (1/leverage))
-        else:
-            liquidation_price = entry_price * (1 + (1/leverage))
 
         trade_record = {
             "id": trade_id,
             "symbol": symbol,
-            "direction": direction,
-            "leverage": leverage,
             "quoted_price": price,
             "entry_price": entry_price,
-            "liquidation_price": liquidation_price,
             "slippage_pct": slippage_pct,
             "fee_usd": fee_usd,
-            "amount_usd": initial_margin,
-            "notional_usd": notional_value,
-            "tokens": notional_value / entry_price,
+            "amount_usd": trade_amount,
+            "tokens": capital_deployed / entry_price,
             "confidence": confidence_score,
             "status": "open"
         }
@@ -120,8 +184,8 @@ class ActorAgent:
         self.open_positions[trade_id] = trade_record
         return trade_record
 
-    async def close_trade(self, trade_id: str, current_price: float, l2_book: dict = None, liquidation: bool = False) -> dict:
-        """Closes an open mock futures trade with latency, L2 slippage, and fees."""
+    async def close_trade(self, trade_id: str, current_price: float, l2_book: dict = None) -> dict:
+        """Closes an open mock trade with latency, L2 slippage, and fees."""
         if trade_id not in self.open_positions:
             return {"status": "error", "reason": "Trade not found"}
 
@@ -134,47 +198,35 @@ class ActorAgent:
         latency = random.uniform(0.02, 0.1)
         await asyncio.sleep(latency)
 
-        direction = trade.get("direction", "LONG")
-
-        # Realism: L2 Slippage on exit
-        if l2_book and ((direction == "LONG" and "bids" in l2_book) or (direction == "SHORT" and "asks" in l2_book)):
-            book_side = "bids" if direction == "LONG" else "asks"
+        # Realism: L2 Slippage on exit (Selling into bids)
+        if l2_book and "bids" in l2_book:
             remaining_tokens = trade["tokens"]
             total_usd_received = 0.0
 
-            for price_level, vol in l2_book[book_side]:
+            for bid_price, bid_vol in l2_book["bids"]:
                 if remaining_tokens <= 0:
                     break
-                tokens_to_take = min(remaining_tokens, vol)
-                usd_gained = tokens_to_take * price_level
+                tokens_to_take = min(remaining_tokens, bid_vol)
+                usd_gained = tokens_to_take * bid_price
 
                 total_usd_received += usd_gained
                 remaining_tokens -= tokens_to_take
 
             if trade["tokens"] > 0:
                 exit_price = total_usd_received / trade["tokens"]
-                slippage_pct = abs(current_price - exit_price) / current_price
+                slippage_pct = (current_price - exit_price) / current_price
             else:
                 slippage_pct = random.uniform(0.0001, 0.0005)
-                exit_price = current_price * (1 - slippage_pct) if direction == "LONG" else current_price * (1 + slippage_pct)
+                exit_price = current_price * (1 - slippage_pct)
         else:
             slippage_pct = random.uniform(0.0001, 0.0005)
-            exit_price = current_price * (1 - slippage_pct) if direction == "LONG" else current_price * (1 + slippage_pct)
+            exit_price = current_price * (1 - slippage_pct)
 
-        if liquidation:
-            # Force exit price to exactly the liquidation price if liquidated
-            exit_price = trade["liquidation_price"]
+        gross_exit_value = trade["tokens"] * exit_price
+        exit_fee = gross_exit_value * 0.001 # 0.1% fee
+        net_exit_value = gross_exit_value - exit_fee
 
-        gross_exit_notional = trade["tokens"] * exit_price
-        exit_fee = gross_exit_notional * 0.001 # 0.1% fee on notional
-
-        # Calculate PnL based on direction
-        if direction == "LONG":
-            pnl = gross_exit_notional - trade["notional_usd"]
-        else:
-            pnl = trade["notional_usd"] - gross_exit_notional
-
-        net_exit_value = trade["amount_usd"] + pnl - exit_fee
+        pnl = net_exit_value - trade["amount_usd"]
 
         self.balance += net_exit_value
 
@@ -185,27 +237,11 @@ class ActorAgent:
 
         trade["exit_price"] = exit_price
         trade["exit_fee_usd"] = exit_fee
-        trade["pnl"] = pnl - exit_fee - trade["fee_usd"] # Total PnL includes all fees
-        trade["status"] = "liquidated" if liquidation else "closed"
+        trade["pnl"] = pnl
+        trade["status"] = "closed"
 
         self.mock_trades.append(trade)
         return trade
-
-    async def check_liquidations(self, current_price: float):
-        """Checks all open positions against their liquidation price and liquidates if breached."""
-        trades_to_close = []
-        for trade_id, trade in list(self.open_positions.items()):
-            direction = trade.get("direction", "LONG")
-            liq_price = trade.get("liquidation_price")
-
-            if liq_price:
-                if direction == "LONG" and current_price <= liq_price:
-                    trades_to_close.append(trade_id)
-                elif direction == "SHORT" and current_price >= liq_price:
-                    trades_to_close.append(trade_id)
-
-        if trades_to_close:
-            await asyncio.gather(*[self.close_trade(tid, current_price, liquidation=True) for tid in trades_to_close])
 
     def update_mdd(self, current_wallet_value: float):
         if current_wallet_value > self.peak_wallet:

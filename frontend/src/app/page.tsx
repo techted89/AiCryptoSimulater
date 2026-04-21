@@ -21,9 +21,6 @@ interface AgentStats {
 interface Trade {
   id: string;
   symbol: string;
-  direction?: string;
-  leverage?: number;
-  liquidation_price?: number;
   quoted_price?: number;
   entry_price: number;
   exit_price?: number;
@@ -31,7 +28,6 @@ interface Trade {
   fee_usd?: number;
   exit_fee_usd?: number;
   amount_usd: number;
-  notional_usd?: number;
   pnl?: number;
   confidence: number;
   status: string;
@@ -42,6 +38,10 @@ export default function Home() {
   const [activeTrades, setActiveTrades] = useState<Trade[]>([]);
   const [historyTrades, setHistoryTrades] = useState<Trade[]>([]);
   const [loading, setLoading] = useState(false);
+  const [actorKey, setActorKey] = useState('');
+  const [researcherKey, setResearcherKey] = useState('');
+  const [groqKey, setGroqKey] = useState('');
+  const [keysSaved, setKeysSaved] = useState(false);
 
   // Determine dynamic base URLs for the backend API and WS
   const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
@@ -122,6 +122,31 @@ export default function Home() {
       }
     };
   }, []);
+
+
+
+  const handleSaveKeys = async () => {
+    setLoading(true);
+    try {
+      const response = await fetch(`${baseUrl}/api/keys`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ actor_key: actorKey, researcher_key: researcherKey, groq_key: groqKey }),
+      });
+      if (response.ok) {
+        setKeysSaved(true);
+        setTimeout(() => setKeysSaved(false), 3000);
+      } else {
+        const errorText = await response.text();
+        console.error('Failed to save keys:', response.status, errorText);
+        throw new Error(`API Error: ${response.status}`);
+      }
+    } catch (err) {
+      console.error('Error saving keys:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleControlAction = async (action: string) => {
     setLoading(true);
@@ -212,12 +237,47 @@ export default function Home() {
               </div>
             </div>
 
+
             {/* Admin Controls */}
             <div className="bg-slate-900 p-6 rounded-xl border border-slate-800 shadow-lg border-l-4 border-l-rose-500">
               <h2 className="text-lg font-semibold text-white mb-4 flex items-center">
                 God Mode Controls
               </h2>
+
+              <div className="space-y-3 mb-6 border-b border-slate-800 pb-4">
+                <h3 className="text-sm font-semibold text-slate-300">Gemini API Keys</h3>
+                <input
+                  type="password"
+                  placeholder="Actor Agent Key"
+                  value={actorKey}
+                  onChange={(e) => setActorKey(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 text-slate-300 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500"
+                />
+                <input
+                  type="password"
+                  placeholder="Researcher Agent Key"
+                  value={researcherKey}
+                  onChange={(e) => setResearcherKey(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 text-slate-300 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500"
+                />
+                <input
+                  type="password"
+                  placeholder="Groq API Key (Actor Fallback)"
+                  value={groqKey}
+                  onChange={(e) => setGroqKey(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 text-slate-300 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500"
+                />
+                <button
+                  onClick={handleSaveKeys}
+                  disabled={loading}
+                  className="w-full flex items-center justify-center space-x-2 bg-emerald-600 hover:bg-emerald-700 text-white py-2 rounded-lg font-medium text-sm transition-colors disabled:opacity-50"
+                >
+                  <span>{keysSaved ? 'Saved!' : 'Save Keys'}</span>
+                </button>
+              </div>
+
               <div className="space-y-3">
+
                 <div className="grid grid-cols-2 gap-3">
                   <button
                     onClick={() => handleControlAction('trigger_trade')}
@@ -256,29 +316,19 @@ export default function Home() {
                 {activeTrades.length > 0 && (
                   <div className="space-y-2">
                     <h3 className="text-xs text-slate-400 uppercase tracking-wider font-semibold border-b border-slate-800 pb-1">Active Positions ({activeTrades.length})</h3>
-                    {activeTrades.map((trade) => {
-                      const isLong = trade.direction === "LONG";
-                      const colorClass = isLong ? "text-emerald-400" : "text-rose-400";
-                      const borderClass = isLong ? "border-emerald-900/50" : "border-rose-900/50";
-                      const bgClass = isLong ? "bg-emerald-500" : "bg-rose-500";
-
-                      return (
-                        <div key={trade.id} className={`bg-slate-950 p-3 rounded-lg border ${borderClass} relative overflow-hidden text-sm`}>
-                          <div className={`absolute top-0 left-0 w-1 h-full ${bgClass} animate-pulse`}></div>
-                          <div className="flex justify-between items-center mb-1 pl-2">
-                            <span className={`font-semibold ${colorClass}`}>
-                              {trade.symbol}
-                              <span className="text-xs ml-1 bg-slate-800 px-1 py-0.5 rounded">{trade.direction || "LONG"} {trade.leverage || 1}x</span>
-                            </span>
-                            <span className="text-xs text-slate-400">Entry: ${trade.entry_price.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits:2})}</span>
-                          </div>
-                          <div className="flex justify-between text-slate-500 text-[10px] pl-2 mt-1 border-t border-slate-800 pt-1">
-                            <span>Liq: ${trade.liquidation_price?.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits:2}) || '---'}</span>
-                            <span>Margin: ${trade.amount_usd.toFixed(2)}</span>
-                          </div>
+                    {activeTrades.map((trade) => (
+                      <div key={trade.id} className="bg-slate-950 p-3 rounded-lg border border-blue-900/50 relative overflow-hidden text-sm">
+                        <div className="absolute top-0 left-0 w-1 h-full bg-blue-500 animate-pulse"></div>
+                        <div className="flex justify-between items-center mb-1 pl-2">
+                          <span className="font-semibold text-blue-400">{trade.symbol} <span className="text-xs text-slate-500 ml-1">OPEN</span></span>
+                          <span className="text-xs text-slate-400">Entry: ${trade.entry_price.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits:2})}</span>
                         </div>
-                      );
-                    })}
+                        <div className="flex justify-between text-slate-500 text-[10px] pl-2 mt-1 border-t border-slate-800 pt-1">
+                          <span>Fee: ${trade.fee_usd?.toFixed(2)}</span>
+                          <span>Slip: {trade.slippage_pct ? (trade.slippage_pct*100).toFixed(3) : '0'}%</span>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 )}
 
@@ -289,14 +339,11 @@ export default function Home() {
                     <p className="text-slate-500 text-xs text-center mt-4">No closed trades.</p>
                   ) : (
                     historyTrades.map((trade) => (
-                      <div key={trade.id} className={`bg-slate-950 p-3 rounded-lg border ${trade.status === 'liquidated' ? 'border-rose-900/80' : 'border-slate-800'} text-sm`}>
+                      <div key={trade.id} className="bg-slate-950 p-3 rounded-lg border border-slate-800 text-sm">
                         <div className="flex justify-between items-center mb-1">
-                          <span className="font-semibold text-slate-300">
-                            {trade.symbol}
-                            <span className="text-xs ml-1 bg-slate-800 px-1 py-0.5 rounded text-slate-400">{trade.direction || "LONG"} {trade.leverage || 1}x</span>
-                          </span>
-                          <span className={`px-2 py-0.5 rounded text-[10px] uppercase tracking-wider font-bold ${trade.status === 'liquidated' ? 'bg-rose-900/80 text-white' : (trade.pnl && trade.pnl > 0 ? 'bg-emerald-900/50 text-emerald-400' : 'bg-rose-900/50 text-rose-400')}`}>
-                            {trade.status === 'liquidated' ? 'LIQUIDATED' : (trade.pnl && trade.pnl > 0 ? 'WIN' : 'LOSS')}
+                          <span className="font-semibold text-slate-300">{trade.symbol}</span>
+                          <span className={`px-2 py-0.5 rounded text-[10px] uppercase tracking-wider font-bold ${trade.pnl && trade.pnl > 0 ? 'bg-emerald-900/50 text-emerald-400' : 'bg-rose-900/50 text-rose-400'}`}>
+                            {trade.pnl && trade.pnl > 0 ? 'WIN' : 'LOSS'}
                           </span>
                         </div>
                         <div className="flex justify-between text-slate-400 text-xs">
@@ -304,7 +351,7 @@ export default function Home() {
                           <span>Out: ${trade.exit_price?.toLocaleString(undefined, {maximumFractionDigits:2})}</span>
                         </div>
                         <div className="flex justify-between mt-2 text-xs border-t border-slate-800 pt-1">
-                           <span className="text-slate-500">Margin: ${trade.amount_usd.toFixed(2)}</span>
+                           <span className="text-slate-500">Fees: ${(trade.fee_usd! + (trade.exit_fee_usd || 0)).toFixed(2)}</span>
                            <span className={`font-bold ${trade.pnl && trade.pnl >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
                              {trade.pnl && trade.pnl >= 0 ? '+' : ''}{trade.pnl?.toFixed(2)}
                            </span>
