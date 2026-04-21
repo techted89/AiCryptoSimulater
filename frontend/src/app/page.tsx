@@ -131,10 +131,7 @@ export default function Home() {
     try {
       const response = await fetch(`${baseUrl}/api/keys`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Admin-Token': adminToken
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ actor_key: actorKey, researcher_key: researcherKey, groq_key: groqKey }),
       });
       if (response.ok) {

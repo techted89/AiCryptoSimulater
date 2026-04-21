@@ -21,6 +21,8 @@ kill $(lsof -t -i :8000) 2>/dev/null || true
 kill $(lsof -t -i :3001) 2>/dev/null || true
 kill $(lsof -t -i :3002) 2>/dev/null || true
 
+}
+trap cleanup SIGINT SIGTERM EXIT
 
 echo "========================================="
 echo " Starting AI Crypto Trading Simulator    "
@@ -37,15 +39,15 @@ echo "Setting environment variables..."
 export OLLAMA_BASE_URL="http://localhost:11434"
 
 echo "Starting Backend API..."
-uvicorn app.main:app --port 8000 > backend.log 2>&1 &
+uvicorn app.main:app --port 8000 &
 PIDS+=($!)
 
 echo "Starting Data Ingestor..."
-python app/ingestor.py > ingestor.log 2>&1 &
+python app/ingestor.py &
 PIDS+=($!)
 
 echo "Starting Frontend..."
-(cd frontend && npm run dev) > frontend.log 2>&1 &
+(cd frontend && npm run dev) &
 PIDS+=($!)
 
 echo "========================================="

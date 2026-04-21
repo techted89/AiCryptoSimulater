@@ -44,24 +44,23 @@ class ActorAgent:
         """Autonomously decides when to close trades based on profit targets, stop loss, or LLM analysis."""
         trades_to_close = []
         positions = list(self.open_positions.items())
+        for trade_id, trade in positions:
+            entry_price = trade["entry_price"]
+            pnl_pct = (current_price - entry_price) / entry_price
 
-        async with aiohttp.ClientSession() as session:
-            for trade_id, trade in positions:
-                entry_price = trade["entry_price"]
-                pnl_pct = (current_price - entry_price) / entry_price
+            # Default algorithmic fallback
+            should_close = False
+            if pnl_pct > 0.02 or pnl_pct < -0.01:
+                should_close = True
 
-                # Default algorithmic fallback
-                should_close = False
-                if pnl_pct > 0.02 or pnl_pct < -0.01:
-                    should_close = True
+            # Hybrid Local/Cloud LLM Evaluation only if neutral band
+            if not should_close and -0.01 <= pnl_pct <= 0.02:
+                prompt = f"Trade ID: {trade_id}\nSymbol: {trade['symbol']}\nEntry Price: {entry_price}\nCurrent Price: {current_price}\nPnL: {pnl_pct*100:.2f}%\n\nShould I CLOSE this trade or HOLD? Respond strictly with 'CLOSE' or 'HOLD'."
 
-                # Hybrid Local/Cloud LLM Evaluation only if neutral band
-                if not should_close and -0.01 <= pnl_pct <= 0.02:
-                    prompt = f"Trade ID: {trade_id}\nSymbol: {trade['symbol']}\nEntry Price: {entry_price}\nCurrent Price: {current_price}\nPnL: {pnl_pct*100:.2f}%\n\nShould I CLOSE this trade or HOLD? Respond strictly with 'CLOSE' or 'HOLD'."
-
-                    try:
+                try:
+                    async with aiohttp.ClientSession() as session:
                         async with session.post(
-                            "http://localhost:11434/v1/chat/completions",
+                            f"{os.environ.get('OLLAMA_BASE_URL', 'http://localhost:11434')}/v1/chat/completions",
                             json={"model": "llama3.2:1b", "messages": [{"role": "user", "content": prompt}]},
                             timeout=aiohttp.ClientTimeout(total=2.0)
                         ) as res:
@@ -73,12 +72,13 @@ class ActorAgent:
                                 print("Evaluated exit using Local Ollama")
                             else:
                                 raise Exception("Ollama error")
-                    except Exception as e:
-                        # Fallback to Groq
-                        groq_key = os.environ.get("GROQ_API_KEY")
-                        if groq_key:
-                            try:
-                                headers = {"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"}
+                except Exception as e:
+                    # Fallback to Groq
+                    groq_key = os.environ.get("GROQ_API_KEY")
+                    if groq_key:
+                        try:
+                            headers = {"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"}
+                            async with aiohttp.ClientSession() as session:
                                 async with session.post(
                                     "https://api.groq.com/openai/v1/chat/completions",
                                     headers=headers,
@@ -91,11 +91,11 @@ class ActorAgent:
                                         if "CLOSE" in ans.upper():
                                             should_close = True
                                         print("Evaluated exit using Fallback Groq")
-                            except Exception as e:
-                                print("Both LLM calls failed. Falling back to algorithmic analysis.")
+                        except Exception as e:
+                            print("Both LLM calls failed. Falling back to algorithmic analysis.")
 
-                if should_close:
-                    trades_to_close.append(trade_id)
+            if should_close:
+                trades_to_close.append(trade_id)
 
         for trade_id in trades_to_close:
             await self.close_trade(trade_id, current_price, l2_book)
@@ -121,11 +121,10 @@ class ActorAgent:
             return {"status": "skipped", "reason": "Trade amount invalid"}
 
         # Minimum Expected Gain (MEG) Check
-        MIN_PROFIT_THRESHOLD = 2.0
         target_price = price * 1.02 # mock expected 2% gain
         fees_and_slip = (trade_amount * 0.001) + (trade_amount * 0.0005) # est
         expected_profit = (target_price - price) * (trade_amount / price)
-        if expected_profit < fees_and_slip + MIN_PROFIT_THRESHOLD:
+        if expected_profit < fees_and_slip + 2.0:
             return {"status": "skipped", "reason": "MEG not met, fees too high"}
 
         if not self.check_risk(trade_amount, total_wallet_value):
