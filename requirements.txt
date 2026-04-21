@@ -6,3 +6,5 @@ websockets
 pysqlite3-binary
 prometheus-client
 optuna
+aiohttp
+google-generativeai
