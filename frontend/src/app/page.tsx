@@ -326,7 +326,7 @@ export default function Home() {
             )}
 
             {/* Active & Recent Trades */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 h-[350px]">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:h-[350px]">
               {/* Active Trades */}
               <div className="bg-slate-900 p-6 rounded-xl border border-slate-800 shadow-lg flex flex-col overflow-hidden">
                 <h2 className="text-lg font-semibold text-white mb-4">Active Positions ({activeTrades.length})</h2>
