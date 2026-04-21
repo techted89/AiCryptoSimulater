@@ -283,7 +283,10 @@ _secure_store = {}
 @app.post("/api/keys")
 async def set_keys(req: KeysRequest, token: str = Security(api_key_header)):
     # Very basic auth
-    if token != "super-secret-admin-token":
+    expected_token = os.environ.get("ADMIN_TOKEN")
+    if not expected_token:
+        raise HTTPException(status_code=500, detail="Server not configured for admin access (ADMIN_TOKEN missing)")
+    if token != expected_token:
         raise HTTPException(status_code=401, detail="Unauthorized")
     _secure_store["GEMINI_API_KEY_ACTOR"] = req.actor_key
     _secure_store["GEMINI_API_KEY_RESEARCHER"] = req.researcher_key

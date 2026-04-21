@@ -46,6 +46,7 @@ export default function Home() {
   // Determine dynamic base URLs for the backend API and WS
   const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
   const baseWsUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8000';
+  const adminToken = process.env.NEXT_PUBLIC_ADMIN_TOKEN;
 
   const fetchState = async () => {
     try {
@@ -126,11 +127,19 @@ export default function Home() {
 
 
   const handleSaveKeys = async () => {
+    if (!adminToken) {
+      console.error('Failed to save keys: NEXT_PUBLIC_ADMIN_TOKEN is not set in the environment.');
+      alert('Failed: Admin token is missing. Please configure your environment.');
+      return;
+    }
     setLoading(true);
     try {
       const response = await fetch(`${baseUrl}/api/keys`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Admin-Token': adminToken
+        },
         body: JSON.stringify({ actor_key: actorKey, researcher_key: researcherKey, groq_key: groqKey }),
       });
       if (response.ok) {
@@ -239,6 +248,7 @@ export default function Home() {
 
 
             {/* Admin Controls */}
+            {adminToken ? (
             <div className="bg-slate-900 p-6 rounded-xl border border-slate-800 shadow-lg border-l-4 border-l-rose-500">
               <h2 className="text-lg font-semibold text-white mb-4 flex items-center">
                 God Mode Controls
@@ -306,6 +316,14 @@ export default function Home() {
                 </button>
               </div>
             </div>
+            ) : (
+              <div className="bg-slate-900 p-6 rounded-xl border border-slate-800 shadow-lg border-l-4 border-l-slate-700 opacity-50">
+                <h2 className="text-lg font-semibold text-white mb-4 flex items-center">
+                  God Mode Controls (Disabled)
+                </h2>
+                <p className="text-sm text-slate-400">Configure NEXT_PUBLIC_ADMIN_TOKEN to enable admin controls.</p>
+              </div>
+            )}
 
             {/* Active & Recent Trades */}
             <div className="bg-slate-900 p-6 rounded-xl border border-slate-800 shadow-lg h-[350px] overflow-hidden flex flex-col">
