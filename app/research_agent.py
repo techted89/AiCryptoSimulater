@@ -118,10 +118,10 @@ class ResearchAgent:
 
         return analysis
 
-    async def analyze_current_state(self, symbol: str, price: float, rsi: float, dxy: float = None, sp500: float = None, news: str = "Neutral", l2_book: dict = None, macd: float = 0.0) -> float:
+    def analyze_current_state(self, symbol: str, price: float, rsi: float, dxy: float = None, sp500: float = None, news: str = "Neutral") -> dict:
         """
         Queries ChromaDB for similar past states using multi-modal inputs.
-        Returns a mock 'Confidence Score' between 0.0 and 1.0.
+        Returns a dictionary with 'confidence' score (0.0 to 1.0) and 'direction' ('LONG' or 'SHORT').
         """
         l2_imbalance = 0.0
         if l2_book:
@@ -135,23 +135,15 @@ class ResearchAgent:
         if dxy:
              self._add_thought(f"Macro correlation check (DXY: {dxy:.1f}, SPX: {sp500:.1f})")
 
-        # LLM override if configured
-        gemini_key = os.environ.get("GEMINI_API_KEY_RESEARCHER")
-        if gemini_key:
-             self._add_thought("Querying Gemini LLM for strategy selection and confidence...")
-             prompt = f"Analyze the following market state and provide a single confidence score between 0.0 and 1.0 for executing a trade.\n\nMarket State:\n{current_snapshot}\n\nScore:"
-             llm_response = await call_gemini_with_retry(gemini_key, prompt)
-             self._add_thought(f"Gemini response: {llm_response[:50]}...")
-             try:
-                 import re
-                 match = re.search(r'\b(0\.\d+|1\.0|0|1)\b', llm_response)
-                 if match:
-                     llm_conf = float(match.group(1))
-                     if 0.0 <= llm_conf <= 1.0:
-                         self.previous_rsi = rsi
-                         return llm_conf
-             except Exception as e:
-                 self._add_thought(f"Gemini parse failed: {e}")
+        direction = "LONG" # Default bias
+
+        # Determine direction based on basic RSI mean reversion
+        if rsi > 60 or news == "Bearish_News":
+            direction = "SHORT"
+            self._add_thought(f"Directional Bias: SHORT. Overbought RSI ({rsi:.1f}) or Bearish News.")
+        elif rsi < 40 or news == "Bullish_News":
+            direction = "LONG"
+            self._add_thought(f"Directional Bias: LONG. Oversold RSI ({rsi:.1f}) or Bullish News.")
 
         try:
             # Relax threshold or fallback to synthetic bootstrapping
@@ -162,7 +154,12 @@ class ResearchAgent:
             )
         except Exception:
             self._add_thought("RAG Query Failed: Database unavailable. Defaulting to 0.5 confidence.")
-            return 0.5
+            return {"confidence": 0.5, "direction": direction} # Default confidence if no data
+
+        if not results or not results['metadatas'] or not results['metadatas'][0]:
+            # No memory yet, default confidence
+            self._add_thought("No historical matches found in vector memory. Waiting for more data.")
+            return {"confidence": 0.5, "direction": direction}
 
         if not results or not results.get('metadatas') or not results['metadatas'][0]:
             self._add_thought("No historical matches found in vector memory. Bootstrapping synthetic experience...")
@@ -186,33 +183,19 @@ class ResearchAgent:
                 total_resolved += 1
 
         if total_resolved == 0:
-            confidence = 0.5
-        else:
-            confidence = success_count / total_resolved
+            return {"confidence": 0.5, "direction": direction} # Not enough resolved history
 
         self._add_thought(f"Historical win rate for this pattern is {(confidence*100):.1f}%.")
 
-        # Dynamic Strategy adjustments
-        if dxy is not None and dxy > 105.0:
-            confidence -= 0.1 # Macro pressure
-
-        # Check V-Shape RSI
-        if rsi < 30 and self.previous_rsi < rsi:
-            confidence += 0.3
-            self._add_thought("V-Shape RSI confirmation. Momentum shifted upward. (+0.3 conf)")
-        elif rsi > 70:
-            confidence -= 0.2
-            self._add_thought("RSI indicates overbought conditions. (-0.2 conf)")
-
-        if l2_imbalance < -0.5:
-             confidence -= 0.2
-             self._add_thought("Massive sell wall detected in L2 order book. (-0.2 conf)")
-
-        self.previous_rsi = rsi
+        # Add a little boost based on RSI logic just to make the mock agent do something
+        if (rsi < 30 and direction == "LONG") or (rsi > 70 and direction == "SHORT"):
+            confidence += 0.2
+            self._add_thought("RSI aligns strongly with directional bias. Adjusting momentum weight +0.2.")
 
         final_confidence = max(0.0, min(1.0, confidence))
         self._add_thought(f"Final Execution Confidence Score: {final_confidence:.2f}")
-        return final_confidence
+
+        return {"confidence": final_confidence, "direction": direction}
 
 if __name__ == "__main__":
     agent = ResearchAgent()

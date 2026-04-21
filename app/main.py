@@ -55,38 +55,34 @@ async def background_redis_listener():
                 latest_market_state["price"] = data.get("price", 65000.0)
                 latest_market_state["rsi"] = data.get("rsi", 50.0)
 
-                # Autonomous Trading Control
-                dxy = data.get("macro", {}).get("dxy", 104.0)
-                sp500 = data.get("macro", {}).get("sp500", 5200.0)
-                news = data.get("news_sentiment", "Neutral")
-                l2_book = data.get("order_book", None)
-                macd = data.get("macd", 0.0)
+                # Check for liquidations on every tick
+                await actor_agent.check_liquidations(latest_market_state["price"])
 
-                # Evaluate exits autonomously
-                await actor_agent.evaluate_exits(latest_market_state["price"], l2_book)
+                # Mock automated trading logic: Occasionally execute/close trades randomly to simulate trading flow
+                if time.time() % 10 < 1:
+                    if actor_agent.open_positions and random.random() > 0.5:
+                        trade_id = list(actor_agent.open_positions.keys())[0]
+                        await actor_agent.close_trade(trade_id, latest_market_state["price"])
+                    elif random.random() > 0.5:
+                        analysis_result = await run_in_threadpool(
+                            research_agent.analyze_current_state,
+                            "BTC",
+                            latest_market_state["price"],
+                            latest_market_state["rsi"]
+                        )
 
-                # Analyze and execute entries autonomously
-                # Throttle entries
-                global _last_entry_analysis_at
-                try:
-                    _last_entry_analysis_at
-                except NameError:
-                    _last_entry_analysis_at = 0
+                        # Mock variable leverage based on confidence (e.g., higher confidence -> higher leverage, max 10x)
+                        conf_score = analysis_result["confidence"]
+                        direction = analysis_result["direction"]
+                        leverage = max(1.0, round(conf_score * 10))
 
-                COOLDOWN_SECONDS = 10
-                if len(actor_agent.open_positions) < 3 and (time.time() - _last_entry_analysis_at) >= COOLDOWN_SECONDS:
-                    _last_entry_analysis_at = time.time()
-                    conf = await research_agent.analyze_current_state(
-                        "BTC",
-                        latest_market_state["price"],
-                        latest_market_state["rsi"],
-                        dxy,
-                        sp500,
-                        news,
-                        l2_book,
-                        macd
-                    )
-                    await actor_agent.execute_trade("BTC", latest_market_state["price"], conf, l2_book)
+                        await actor_agent.execute_trade(
+                            "BTC",
+                            latest_market_state["price"],
+                            conf_score,
+                            direction=direction,
+                            leverage=leverage
+                        )
 
     except Exception as e:
         import traceback
@@ -320,15 +316,25 @@ async def admin_control(req: ControlRequest):
         # Manually trigger a mock trade from the backend for demonstration
         # First trigger research agent analysis to populate thought log
         # Offload synchronous ChromaDB call to threadpool to prevent blocking the event loop
-        conf = await research_agent.analyze_current_state(
+        analysis_result = await run_in_threadpool(
+            research_agent.analyze_current_state,
             "BTC",
             latest_market_state["price"],
             latest_market_state["rsi"]
         )
 
         with TRADE_EXECUTION_LATENCY.time():
+             conf_score = analysis_result["confidence"]
+             direction = analysis_result["direction"]
+             leverage = max(1.0, round(conf_score * 10))
              # Since it's now async, we must await it
-             result = await actor_agent.execute_trade("BTC", latest_market_state["price"], conf)
+             result = await actor_agent.execute_trade(
+                 "BTC",
+                 latest_market_state["price"],
+                 conf_score,
+                 direction=direction,
+                 leverage=leverage
+             )
         return {"status": "success", "result": result}
     elif req.action == "close_trade":
         # Manually close the oldest open trade
