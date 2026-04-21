@@ -374,7 +374,7 @@ export default function Home() {
                             <span>Out: ${trade.exit_price?.toLocaleString(undefined, {maximumFractionDigits:2})}</span>
                           </div>
                           <div className="flex justify-between mt-2 text-xs border-t border-slate-800 pt-1">
-                             <span className="text-slate-500">Fees: ${(trade.fee_usd! + (trade.exit_fee_usd || 0)).toFixed(2)}</span>
+                             <span className="text-slate-500">Fees: ${((trade.fee_usd || 0) + (trade.exit_fee_usd || 0)).toFixed(2)}</span>
                              <span className={`font-bold ${trade.pnl && trade.pnl >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
                                {trade.pnl && trade.pnl >= 0 ? '+' : ''}{trade.pnl?.toFixed(2)}
                              </span>
