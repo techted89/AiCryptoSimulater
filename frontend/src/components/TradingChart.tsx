@@ -150,7 +150,7 @@ export default function TradingChart() {
                   <button
                     key={val}
                     onClick={() => setTimeWindow(val)}
-                    className={`px-2 py-0.5 text-[10px] rounded border transition-colors ${
+                    className={`px-3 py-1 text-xs rounded border transition-colors ${
                       timeWindow === val
                         ? 'bg-emerald-900/50 border-emerald-500 text-emerald-300'
                         : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700'
@@ -169,7 +169,7 @@ export default function TradingChart() {
                         ? prev.filter(i => i !== indicator)
                         : [...prev, indicator]
                     )}
-                    className={`px-2 py-0.5 text-[10px] rounded border transition-colors uppercase ${
+                    className={`px-3 py-1 text-xs rounded border transition-colors uppercase ${
                       activeIndicators.includes(indicator)
                         ? 'bg-blue-900/50 border-blue-500 text-blue-300'
                         : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700'
@@ -186,7 +186,7 @@ export default function TradingChart() {
           </div>
           <div className="flex-1">
             <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={displayData}>
+          <LineChart data={displayData} syncId="tradingChart">
             <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
             <XAxis dataKey="time" stroke="#94a3b8" fontSize={12} />
             <YAxis domain={['auto', 'auto']} stroke="#94a3b8" fontSize={12} width={80} tickFormatter={(value) => `$${value.toLocaleString()}`} />
@@ -271,7 +271,7 @@ export default function TradingChart() {
               </button>
             </div>
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={displayData}>
+              <LineChart data={displayData} syncId="tradingChart">
                 <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
                 <XAxis dataKey="time" stroke="#94a3b8" fontSize={12} />
                 <YAxis domain={config.domain} stroke="#94a3b8" fontSize={12} width={40} />

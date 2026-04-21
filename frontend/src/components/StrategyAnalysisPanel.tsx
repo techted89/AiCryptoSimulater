@@ -68,22 +68,44 @@ export default function StrategyAnalysisPanel() {
               <p className="text-slate-400 text-xs uppercase tracking-wider">Description</p>
               <p className="text-slate-300 text-sm mt-1">{strategy.description}</p>
             </div>
-            <div className="flex gap-4">
+            <div className="grid grid-cols-2 gap-4 border-t border-slate-800 pt-4 mt-4">
               <div>
-                <p className="text-slate-400 text-xs uppercase tracking-wider mb-1">Indicators</p>
-                <div className="flex flex-wrap gap-2">
-                  {strategy.indicators.map((ind, i) => (
-                    <span key={i} className="bg-purple-900/50 text-purple-300 text-[10px] px-2 py-1 rounded border border-purple-800">
-                      {ind}
-                    </span>
-                  ))}
+                <p className="text-slate-400 text-xs uppercase tracking-wider mb-2">Indicators</p>
+                <div className="space-y-3">
+                  <div>
+                    <label className="flex justify-between text-xs text-slate-300 mb-1">
+                      <span>RSI Period</span>
+                      <span className="text-blue-400 font-mono">14</span>
+                    </label>
+                    <input type="range" min="7" max="28" defaultValue="14" className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer" />
+                  </div>
+                  <div>
+                    <label className="flex justify-between text-xs text-slate-300 mb-1">
+                      <span>Oversold / Overbought</span>
+                      <span className="text-blue-400 font-mono">30 / 70</span>
+                    </label>
+                    <input type="range" min="10" max="40" defaultValue="30" className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer" />
+                  </div>
                 </div>
               </div>
               <div>
-                <p className="text-slate-400 text-xs uppercase tracking-wider mb-1">Risk Profile</p>
-                <span className="bg-orange-900/50 text-orange-400 text-[10px] px-2 py-1 rounded border border-orange-800 uppercase font-bold">
-                  {strategy.risk_profile}
-                </span>
+                <p className="text-slate-400 text-xs uppercase tracking-wider mb-2">Risk Parameters</p>
+                <div className="space-y-3">
+                  <div>
+                    <label className="flex justify-between text-xs text-slate-300 mb-1">
+                      <span>Max Drawdown (%)</span>
+                      <span className="text-orange-400 font-mono">5.0%</span>
+                    </label>
+                    <input type="range" min="1" max="20" defaultValue="5" className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer" />
+                  </div>
+                  <div>
+                    <label className="flex justify-between text-xs text-slate-300 mb-1">
+                      <span>Position Sizing (%)</span>
+                      <span className="text-orange-400 font-mono">2.5%</span>
+                    </label>
+                    <input type="range" min="0.5" max="10" step="0.5" defaultValue="2.5" className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer" />
+                  </div>
+                </div>
               </div>
             </div>
           </div>
