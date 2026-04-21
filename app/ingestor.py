@@ -1,21 +1,54 @@
 import asyncio
 import json
 import random
-import redis.asyncio as redis
 import time
+import redis.asyncio as redis
+import ccxt.pro as ccxt
 
-async def simulate_data_ingestion():
-    # Connect to the local Redis instance
-    r = redis.Redis(host='localhost', port=6379, db=0)
+# Shared state to hold latest data before publishing
+shared_state = {
+    "symbol": "BTC",
+    "price": 65000.0,
+    "order_book": {
+        "bids": [],
+        "asks": []
+    }
+}
 
-    base_price = 65000.0
+async def fetch_ticker(exchange):
+    global shared_state
+    while True:
+        try:
+            ticker = await exchange.watch_ticker('BTC/USDT')
+            shared_state["price"] = ticker.get('last', shared_state["price"])
+        except ccxt.NetworkError as e:
+            print(f"Network error in fetch_ticker: {e}")
+            await asyncio.sleep(5)
+        except Exception as e:
+            print(f"Error in fetch_ticker: {e}")
+            await asyncio.sleep(5)
 
+async def fetch_order_book(exchange):
+    global shared_state
+    while True:
+        try:
+            orderbook = await exchange.watch_order_book('BTC/USDT', limit=5)
+            shared_state["order_book"]["bids"] = orderbook.get('bids', [])
+            shared_state["order_book"]["asks"] = orderbook.get('asks', [])
+        except ccxt.NetworkError as e:
+            print(f"Network error in fetch_order_book: {e}")
+            await asyncio.sleep(5)
+        except Exception as e:
+            print(f"Error in fetch_order_book: {e}")
+            await asyncio.sleep(5)
+
+async def publish_data(r):
+    global shared_state
     print("Starting data ingestion loop...")
     try:
         while True:
-            # Simulate a realistic price variation (random walk)
-            variation = random.uniform(-50, 50)
-            base_price += variation
+            # We still simulate the technical and macro indicators as requested,
+            # but we use the real live price and real live L2 order book.
 
             # Simple RSI simulation (just random for mock)
             rsi = random.uniform(20, 80)
@@ -28,15 +61,6 @@ async def simulate_data_ingestion():
             macd = random.uniform(-100, 100)
             obv = random.uniform(-10000, 10000)
 
-            # Advanced Realism: Mock L2 Order Book, DXY, and SP500
-            # Create a simple synthetic L2 order book structure
-            spread = random.uniform(0.1, 2.0)
-            best_bid = round(base_price - (spread / 2), 2)
-            best_ask = round(base_price + (spread / 2), 2)
-
-            bids = [[round(best_bid - i, 2), round(random.uniform(0.1, 5.0), 3)] for i in range(5)]
-            asks = [[round(best_ask + i, 2), round(random.uniform(0.1, 5.0), 3)] for i in range(5)]
-
             # Mock Macro Indicators
             dxy = round(104.0 + random.uniform(-0.5, 0.5), 2)
             sp500 = round(5200.0 + random.uniform(-10, 10), 2)
@@ -46,7 +70,7 @@ async def simulate_data_ingestion():
 
             data = {
                 "symbol": "BTC",
-                "price": round(base_price, 2),
+                "price": round(shared_state["price"], 2),
                 "rsi": round(rsi, 2),
                 "mfi": round(mfi, 2),
                 "cmf": round(cmf, 2),
@@ -55,10 +79,7 @@ async def simulate_data_ingestion():
                 "macd": round(macd, 2),
                 "obv": round(obv, 2),
                 "timestamp": time.time(),
-                "order_book": {
-                    "bids": bids,
-                    "asks": asks
-                },
+                "order_book": shared_state["order_book"],
                 "macro": {
                     "dxy": dxy,
                     "sp500": sp500
@@ -77,8 +98,32 @@ async def simulate_data_ingestion():
             await asyncio.sleep(0.1)
     except asyncio.CancelledError:
         print("Ingestion cancelled.")
+
+async def simulate_data_ingestion():
+    # Connect to the local Redis instance
+    r = redis.Redis(host='localhost', port=6379, db=0)
+
+    exchange = ccxt.binanceus()
+
+    # Start async tasks to gather live ticker and order book data
+    tasks = [
+        asyncio.create_task(fetch_ticker(exchange)),
+        asyncio.create_task(fetch_order_book(exchange)),
+        asyncio.create_task(publish_data(r))
+    ]
+
+    try:
+        await asyncio.gather(*tasks)
+    except asyncio.CancelledError:
+        print("Tasks cancelled")
     finally:
+        for t in tasks:
+            t.cancel()
+        await exchange.close()
         await r.close()
 
 if __name__ == "__main__":
-    asyncio.run(simulate_data_ingestion())
+    try:
+        asyncio.run(simulate_data_ingestion())
+    except KeyboardInterrupt:
+        pass

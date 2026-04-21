@@ -14,9 +14,10 @@ def research_agent():
     return ResearchAgent()
 
 def test_get_market_analysis_oversold(research_agent):
+    analysis = research_agent.previous_rsi = 20.0
     analysis = research_agent.get_market_analysis("BTC", 60000.0, 25.0)
     assert "Condition: Oversold/Bullish" in analysis
-    assert "Recommendation: Favorable entry conditions. RAG memory indicates historical positive reversion from these levels." in analysis
+    assert "Recommendation: Favorable entry conditions. V-Shape RSI confirmation detected. RAG memory indicates historical positive reversion from these levels." in analysis
 
 def test_get_market_analysis_overbought(research_agent):
     analysis = research_agent.get_market_analysis("BTC", 60000.0, 75.0)
