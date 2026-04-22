@@ -1,4 +1,3 @@
-import os
 import asyncio
 import json
 import random
@@ -6,42 +5,55 @@ import time
 import redis.asyncio as redis
 import ccxt.pro as ccxt
 
-async def simulate_data_ingestion():
-    # Connect to the local Redis instance
-    r = redis.Redis(host=os.getenv('REDIS_HOST', 'localhost'), port=6379, db=0)
+SYMBOL = 'BTC/USDT'
+BASE_SYMBOL = 'BTC'
+
+# Shared state to hold latest data before publishing
+shared_state = {
+    "symbol": BASE_SYMBOL,
+    "price": None,
+    "order_book": {
+        "bids": [],
+        "asks": []
+    }
+}
 
 async def fetch_ticker(exchange):
-    global shared_state
     while True:
         try:
-            ticker = await exchange.watch_ticker('BTC/USDT')
-            shared_state["price"] = ticker.get('last', shared_state["price"])
-        except ccxt.NetworkError as e:
-            print(f"Network error in fetch_ticker: {e}")
+            ticker = await exchange.watch_ticker(SYMBOL)
+            last_price = ticker.get('last')
+            if last_price is not None:
+                shared_state["price"] = last_price
+        except (ccxt.NetworkError, ccxt.RequestTimeout, ccxt.ExchangeNotAvailable) as e:
+            print(f"Transient error in fetch_ticker: {e}")
             await asyncio.sleep(5)
         except Exception as e:
-            print(f"Error in fetch_ticker: {e}")
-            await asyncio.sleep(5)
+            print(f"Fatal error in fetch_ticker: {e}")
+            raise e
 
 async def fetch_order_book(exchange):
-    global shared_state
     while True:
         try:
-            orderbook = await exchange.watch_order_book('BTC/USDT', limit=5)
+            orderbook = await exchange.watch_order_book(SYMBOL, limit=5)
             shared_state["order_book"]["bids"] = orderbook.get('bids', [])
             shared_state["order_book"]["asks"] = orderbook.get('asks', [])
-        except ccxt.NetworkError as e:
-            print(f"Network error in fetch_order_book: {e}")
+        except (ccxt.NetworkError, ccxt.RequestTimeout, ccxt.ExchangeNotAvailable) as e:
+            print(f"Transient error in fetch_order_book: {e}")
             await asyncio.sleep(5)
         except Exception as e:
-            print(f"Error in fetch_order_book: {e}")
-            await asyncio.sleep(5)
+            print(f"Fatal error in fetch_order_book: {e}")
+            raise e
 
 async def publish_data(r):
-    global shared_state
     print("Starting data ingestion loop...")
     try:
         while True:
+            # Freshness guard
+            if shared_state["price"] is None or not shared_state["order_book"]["bids"] or not shared_state["order_book"]["asks"]:
+                await asyncio.sleep(0.1)
+                continue
+
             # We still simulate the technical and macro indicators as requested,
             # but we use the real live price and real live L2 order book.
 
@@ -64,7 +76,7 @@ async def publish_data(r):
             sentiment = random.choice(["Neutral", "Neutral", "Neutral", "Bullish_News", "Bearish_News"])
 
             data = {
-                "symbol": "BTC",
+                "symbol": BASE_SYMBOL,
                 "price": round(shared_state["price"], 2),
                 "rsi": round(rsi, 2),
                 "mfi": round(mfi, 2),
@@ -114,6 +126,7 @@ async def simulate_data_ingestion():
     finally:
         for t in tasks:
             t.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
         await exchange.close()
         await r.close()
 

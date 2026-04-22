@@ -61,7 +61,7 @@ class ActorAgent:
 
                     try:
                         async with session.post(
-                            os.getenv('OLLAMA_BASE_URL', 'http://localhost:11434') + '/v1/chat/completions',
+                            "http://localhost:11434/v1/chat/completions",
                             json={"model": "llama3.2:1b", "messages": [{"role": "user", "content": prompt}]},
                             timeout=aiohttp.ClientTimeout(total=2.0)
                         ) as res:
