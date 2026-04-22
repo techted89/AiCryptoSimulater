@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  redis:
+    image: redis:latest
+    ports:
+      - "6379:6379"
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend.Dockerfile
+    ports:
+      - "8000:8000"
+    depends_on:
+      - redis
+    environment:
+      - REDIS_HOST=redis
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
+    volumes:
+      - ./chroma_db:/app/chroma_db
+    # Command explicitly starts API and background ingestor (or we can use a wrapper script)
+    command: bash -c "uvicorn app.main:app --host 0.0.0.0 --port 8000 & python app/ingestor.py"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - NEXT_PUBLIC_WS_URL=ws://localhost:8000
