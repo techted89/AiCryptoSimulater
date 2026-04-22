@@ -15,10 +15,13 @@ services:
     environment:
       - REDIS_HOST=redis
       - ALLOWED_ORIGINS=http://localhost:3000
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
     depends_on:
       - redis
     volumes:
       - ./chroma_db:/app/chroma_db
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   ingestor:
     build:
@@ -27,13 +30,19 @@ services:
     command: ["python", "app/ingestor.py"]
     environment:
       - REDIS_HOST=redis
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
     depends_on:
       - redis
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   frontend:
     build:
       context: .
       dockerfile: Dockerfile.frontend
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:8000
+        NEXT_PUBLIC_WS_URL: ws://localhost:8000
     ports:
       - "3000:3000"
     environment:
