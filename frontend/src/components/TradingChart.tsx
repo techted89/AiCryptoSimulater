@@ -37,7 +37,21 @@ interface Macro {
 
 const MAX_DATA_POINTS = 10000;
 
-export default function TradingChart() {
+interface Trade {
+  id: string;
+  symbol: string;
+  entry_price: number;
+  exit_price?: number;
+  pnl?: number;
+  status: string;
+}
+
+interface TradingChartProps {
+  activeTrades?: Trade[];
+  historyTrades?: Trade[];
+}
+
+export default function TradingChart({ activeTrades = [], historyTrades = [] }: TradingChartProps) {
   const [data, setData] = useState<ChartDataPoint[]>([]);
   const [l2Book, setL2Book] = useState<L2Book | null>(null);
   const [macro, setMacro] = useState<Macro | null>(null);
@@ -119,20 +133,20 @@ export default function TradingChart() {
   return (
     <div className="w-full h-full flex flex-col space-y-4">
       {/* Real-Time Macro & Sentiment Bar */}
-      <div className="flex gap-4 p-3 bg-slate-900 rounded-xl border border-slate-800 shadow-lg justify-between items-center text-xs">
+      <div className="flex gap-4 p-3 bg-surface-container rounded-xl border border-outline-variant/20 shadow-lg justify-between items-center text-xs">
         <div className="flex gap-6">
            <div>
-             <span className="text-slate-400 uppercase">DXY (Dollar) </span>
-             <span className="text-slate-200 font-mono font-bold">{macro?.dxy.toFixed(2) || '---'}</span>
+             <span className="text-outline uppercase">DXY (Dollar) </span>
+             <span className="text-on-surface font-mono font-bold">{macro?.dxy.toFixed(2) || '---'}</span>
            </div>
            <div>
-             <span className="text-slate-400 uppercase">S&P 500 </span>
-             <span className="text-slate-200 font-mono font-bold">{macro?.sp500.toFixed(2) || '---'}</span>
+             <span className="text-outline uppercase">S&P 500 </span>
+             <span className="text-on-surface font-mono font-bold">{macro?.sp500.toFixed(2) || '---'}</span>
            </div>
         </div>
         <div>
-           <span className="text-slate-400 uppercase mr-2">News Sentiment </span>
-           <span className={`px-2 py-1 rounded font-bold ${sentiment.includes('Bullish') ? 'bg-emerald-900/50 text-emerald-400' : sentiment.includes('Bearish') ? 'bg-rose-900/50 text-rose-400' : 'bg-slate-800 text-slate-300'}`}>
+           <span className="text-outline uppercase mr-2">News Sentiment </span>
+           <span className={`px-2 py-1 rounded font-bold ${sentiment.includes('Bullish') ? 'bg-secondary/10 text-secondary' : sentiment.includes('Bearish') ? 'bg-error/10 text-error' : 'bg-surface-container-highest text-on-surface-variant'}`}>
              {sentiment.replace("_", " ")}
            </span>
         </div>
@@ -141,10 +155,10 @@ export default function TradingChart() {
       {/* Main UI row: Chart + L2 Order Book */}
       <div className="flex gap-4 h-[300px]">
         {/* Price Chart */}
-        <div className="flex-1 bg-slate-900 p-4 rounded-xl shadow-lg border border-slate-800 flex flex-col">
+        <div className="flex-1 bg-surface-container p-4 rounded-xl shadow-lg border border-outline-variant/20 flex flex-col">
           <div className="flex justify-between items-center mb-2">
             <div className="flex items-center gap-4">
-              <h3 className="text-emerald-400 font-semibold">BTC/USD Price Live Stream</h3>
+              <h3 className="text-secondary font-semibold">BTC/USD Price Live Stream</h3>
               <div className="flex gap-1">
                 {[30, 100, 0].map((val) => (
                   <button
@@ -152,15 +166,15 @@ export default function TradingChart() {
                     onClick={() => setTimeWindow(val)}
                     className={`px-2 py-0.5 text-[10px] rounded border transition-colors ${
                       timeWindow === val
-                        ? 'bg-emerald-900/50 border-emerald-500 text-emerald-300'
-                        : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700'
+                        ? 'bg-secondary/10 border-secondary text-secondary-fixed'
+                        : 'bg-surface-container-highest border-outline-variant/30 text-outline hover:bg-surface-variant'
                     }`}
                   >
                     {val === 0 ? 'All' : `${val} Ticks`}
                   </button>
                 ))}
               </div>
-              <div className="flex gap-1 ml-4 border-l border-slate-700 pl-4">
+              <div className="flex gap-1 ml-4 border-l border-outline-variant/30 pl-4">
                 {['rsi', 'mfi', 'cmf', 'stoch_rsi', 'tdi', 'macd', 'obv'].map((indicator) => (
                   <button
                     key={indicator}
@@ -172,7 +186,7 @@ export default function TradingChart() {
                     className={`px-2 py-0.5 text-[10px] rounded border transition-colors uppercase ${
                       activeIndicators.includes(indicator)
                         ? 'bg-blue-900/50 border-blue-500 text-blue-300'
-                        : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700'
+                        : 'bg-surface-container-highest border-outline-variant/30 text-outline hover:bg-surface-variant'
                     }`}
                   >
                     {indicator.replace('_', ' ')}
@@ -187,9 +201,9 @@ export default function TradingChart() {
           <div className="flex-1">
             <ResponsiveContainer width="100%" height="100%">
           <LineChart data={displayData}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-            <XAxis dataKey="time" stroke="#94a3b8" fontSize={12} />
-            <YAxis domain={['auto', 'auto']} stroke="#94a3b8" fontSize={12} width={80} tickFormatter={(value) => `$${value.toLocaleString()}`} />
+            <CartesianGrid strokeDasharray="3 3" stroke="#3b494b" />
+            <XAxis dataKey="time" stroke="#849495" fontSize={12} />
+            <YAxis domain={['auto', 'auto']} stroke="#849495" fontSize={12} width={80} tickFormatter={(value) => `$${value.toLocaleString()}`} />
             <Tooltip
               contentStyle={{ backgroundColor: '#1e293b', border: 'none', borderRadius: '8px' }}
               itemStyle={{ color: '#e2e8f0' }}
@@ -201,16 +215,16 @@ export default function TradingChart() {
             <Legend />
             {/* Mock Liquidation Heatmaps */}
             {currentPrice > 0 && (
-              <ReferenceLine y={longLiqBand} stroke="#ef4444" strokeWidth={4} strokeOpacity={0.2} label={{ position: 'insideBottomLeft', value: 'Long Liq', fill: '#ef4444', fontSize: 10 }} />
+              <ReferenceLine y={longLiqBand} stroke="#ffb4ab" strokeWidth={4} strokeOpacity={0.2} label={{ position: 'insideBottomLeft', value: 'Long Liq', fill: '#ffb4ab', fontSize: 10 }} />
             )}
             {currentPrice > 0 && (
-              <ReferenceLine y={shortLiqBand} stroke="#10b981" strokeWidth={4} strokeOpacity={0.2} label={{ position: 'insideTopLeft', value: 'Short Liq', fill: '#10b981', fontSize: 10 }} />
+              <ReferenceLine y={shortLiqBand} stroke="#00e475" strokeWidth={4} strokeOpacity={0.2} label={{ position: 'insideTopLeft', value: 'Short Liq', fill: '#00e475', fontSize: 10 }} />
             )}
 
             <Line
               type="monotone"
               dataKey="price"
-              stroke="#10b981"
+              stroke="#00e475"
               strokeWidth={2}
               dot={false}
               isAnimationActive={false}
@@ -221,13 +235,13 @@ export default function TradingChart() {
         </div>
 
         {/* L2 Order Book Simulation */}
-        <div className="w-[200px] bg-slate-900 p-4 rounded-xl shadow-lg border border-slate-800 flex flex-col overflow-hidden">
-          <h3 className="text-slate-300 font-semibold text-xs uppercase tracking-wider mb-2 border-b border-slate-800 pb-2">L2 Order Book</h3>
+        <div className="w-[200px] bg-surface-container p-4 rounded-xl shadow-lg border border-outline-variant/20 flex flex-col overflow-hidden">
+          <h3 className="text-on-surface-variant font-semibold text-xs uppercase tracking-wider mb-2 border-b border-outline-variant/20 pb-2">L2 Order Book</h3>
           <div className="flex-1 flex flex-col text-[10px] font-mono justify-center gap-1">
             {/* Asks (Sell Orders - Red) */}
             <div className="flex flex-col-reverse gap-0.5">
               {l2Book?.asks.map((ask, i) => (
-                <div key={`ask-${i}`} className="flex justify-between text-rose-400 relative">
+                <div key={`ask-${i}`} className="flex justify-between text-error relative">
                    <div className="absolute right-0 top-0 h-full bg-rose-900/20" style={{width: `${(ask[1]/5)*100}%`}}></div>
                    <span>${ask[0].toFixed(2)}</span>
                    <span>{ask[1].toFixed(3)}</span>
@@ -236,14 +250,14 @@ export default function TradingChart() {
             </div>
 
             {/* Spread Marker */}
-            <div className="text-center text-slate-500 py-1 my-1 border-y border-slate-800 bg-slate-950 font-bold">
+            <div className="text-center text-slate-500 py-1 my-1 border-y border-outline-variant/20 bg-surface-container-lowest font-bold">
                ${currentPrice.toFixed(2)}
             </div>
 
             {/* Bids (Buy Orders - Green) */}
             <div className="flex flex-col gap-0.5">
               {l2Book?.bids.map((bid, i) => (
-                <div key={`bid-${i}`} className="flex justify-between text-emerald-400 relative">
+                <div key={`bid-${i}`} className="flex justify-between text-secondary relative">
                    <div className="absolute right-0 top-0 h-full bg-emerald-900/20" style={{width: `${(bid[1]/5)*100}%`}}></div>
                    <span>${bid[0].toFixed(2)}</span>
                    <span>{bid[1].toFixed(3)}</span>
@@ -260,21 +274,21 @@ export default function TradingChart() {
         if (!config) return null;
 
         return (
-          <div key={indicator} className="h-[200px] w-full bg-slate-900 p-4 rounded-xl shadow-lg border border-slate-800">
+          <div key={indicator} className="h-[200px] w-full bg-surface-container p-4 rounded-xl shadow-lg border border-outline-variant/20">
             <div className="flex justify-between items-center mb-2">
               <h3 className="font-semibold" style={{ color: config.color }}>{config.title}</h3>
               <button
                 onClick={() => setActiveIndicators(prev => prev.filter(i => i !== indicator))}
-                className="text-slate-500 hover:text-rose-400"
+                className="text-slate-500 hover:text-error"
               >
                 ✕
               </button>
             </div>
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={displayData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                <XAxis dataKey="time" stroke="#94a3b8" fontSize={12} />
-                <YAxis domain={config.domain} stroke="#94a3b8" fontSize={12} width={40} />
+                <CartesianGrid strokeDasharray="3 3" stroke="#3b494b" />
+                <XAxis dataKey="time" stroke="#849495" fontSize={12} />
+                <YAxis domain={config.domain} stroke="#849495" fontSize={12} width={40} />
                 <Tooltip
                   contentStyle={{ backgroundColor: '#1e293b', border: 'none', borderRadius: '8px' }}
                   itemStyle={{ color: '#e2e8f0' }}
@@ -299,6 +313,43 @@ export default function TradingChart() {
           </div>
         );
       })}
+{/* Open Orders / Positions Tab */}
+      <div className="bg-surface-container-low rounded-xl p-4">
+        <div className="flex gap-6 border-b border-outline-variant/10 mb-4">
+          <button className="pb-2 text-xs font-bold uppercase tracking-widest text-on-surface border-b border-primary">Active Positions ({activeTrades.length})</button>
+          <button className="pb-2 text-xs font-bold uppercase tracking-widest text-outline hover:text-on-surface">Order History</button>
+        </div>
+        <table className="w-full text-left">
+          <thead>
+            <tr className="text-[10px] uppercase font-bold text-outline tracking-wider">
+              <th className="pb-2">Asset</th>
+              <th className="pb-2">Type</th>
+              <th className="pb-2">Entry</th>
+              <th className="pb-2 text-right">PnL</th>
+            </tr>
+          </thead>
+          <tbody className="text-xs font-mono">
+            {activeTrades.map((trade) => (
+              <tr key={trade.id} className="border-b border-outline-variant/5">
+                <td className="py-3 text-on-surface font-headline font-bold">{trade.symbol}</td>
+                <td className="py-3 text-secondary font-bold">LONG</td>
+                <td className="py-3 text-on-surface-variant">{trade.entry_price.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
+                <td className="py-3 text-right text-secondary">ACTIVE</td>
+              </tr>
+            ))}
+            {historyTrades.slice(0, 5).map((trade) => (
+               <tr key={trade.id} className="border-b border-outline-variant/5">
+                <td className="py-3 text-on-surface font-headline font-bold">{trade.symbol}</td>
+                <td className="py-3 text-outline font-bold">CLOSED</td>
+                <td className="py-3 text-on-surface-variant">{trade.entry_price.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
+                <td className={`py-3 text-right font-bold ${trade.pnl && trade.pnl >= 0 ? 'text-secondary' : 'text-error'}`}>
+                  {trade.pnl && trade.pnl >= 0 ? '+' : ''}{trade.pnl?.toFixed(2)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
