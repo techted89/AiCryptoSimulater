@@ -82,6 +82,7 @@ class ResearchAgent:
             )
 
     def get_strategy_details(self) -> dict:
+        """Returns details about the active trading strategy."""
         return {
             "name": "Mean Reversion with RSI Momentum",
             "description": "This strategy attempts to buy oversold conditions and sell overbought conditions based on the Relative Strength Index (RSI). It searches for historical patterns in the ChromaDB vector database where similar states lead to profitable outcomes. It includes a baseline confidence metric built from historical successes and a momentum adjustment.",
@@ -90,6 +91,7 @@ class ResearchAgent:
         }
 
     def get_market_analysis(self, symbol: str, price: float, rsi: float, dxy: float = None, sp500: float = None, news: str = "Neutral", l2_imbalance: float = 0.0, macd: float = 0.0) -> str:
+        """Generates a text-based analysis of the current market conditions."""
         sentiment = "Neutral"
         if rsi > 70:
             sentiment = "Overbought/Bearish"
