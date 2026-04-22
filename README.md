@@ -38,7 +38,18 @@ Alternatively, you can install dependencies manually:
 2.  **Backend Dependencies**: `pip install -r requirements.txt`
 3.  **Frontend Dependencies**: `cd frontend && npm install`
 
-## Running the Simulator
+
+## Running with Docker
+
+You can easily run the entire stack using Docker Compose:
+
+```bash
+docker-compose up --build
+```
+
+This will build the frontend and backend images and start all services. The dashboard will be available at `http://localhost:3000`.
+
+## Running the Simulator locally
 
 To start the full stack locally, simply execute the `start.sh` script:
 
