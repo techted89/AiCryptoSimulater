@@ -178,27 +178,27 @@ export default function Home() {
 return (
     <div className="bg-background text-on-background min-h-screen selection:bg-primary-container selection:text-on-primary-container flex flex-col">
       {/* TopNavBar */}
-      <nav className="flex justify-between items-center w-full px-6 py-3 h-16 bg-gradient-to-r from-surface-container to-surface-container-lowest z-50 fixed top-0 border-b border-outline-variant/10">
+      <nav className="flex justify-between items-center w-full px-6 py-3 h-16 bg-gradient-to-r from-[#1c2026] to-[#0a0e14] z-50 fixed top-0 border-b border-outline-variant/10">
         <div className="flex items-center gap-8">
-          <span className="text-xl font-bold tracking-tighter text-primary uppercase font-headline">KINETIC VAULT</span>
+          <span className="text-xl font-bold tracking-tighter text-[#dbfcff] uppercase font-headline">KINETIC VAULT</span>
           <div className="hidden md:flex gap-6 items-center font-label text-sm uppercase tracking-wider">
             <button
               onClick={() => setActiveTab('dashboard')}
-              className={`transition-colors ${activeTab === 'dashboard' ? 'text-primary-container border-b-2 border-primary-container pb-1' : 'text-outline hover:text-primary'}`}>
+              className={`transition-colors ${activeTab === 'dashboard' ? 'text-[#00F0FF] border-b-2 border-[#00F0FF] pb-1' : 'text-[#849495] hover:text-[#dbfcff]'}`}>
               Dashboard
             </button>
-            <button className="text-outline hover:text-primary transition-colors cursor-not-allowed opacity-50">History</button>
+            <button className="text-[#849495] hover:text-[#dbfcff] transition-colors cursor-not-allowed opacity-50">History</button>
             <button
               onClick={() => setActiveTab('strategy')}
-              className={`transition-colors ${activeTab === 'strategy' ? 'text-primary-container border-b-2 border-primary-container pb-1' : 'text-outline hover:text-primary'}`}>
+              className={`transition-colors ${activeTab === 'strategy' ? 'text-[#00F0FF] border-b-2 border-[#00F0FF] pb-1' : 'text-[#849495] hover:text-[#dbfcff]'}`}>
               Strategy
             </button>
-            <button className="text-outline hover:text-primary transition-colors cursor-not-allowed opacity-50">Research</button>
+            <button className="text-[#849495] hover:text-[#dbfcff] transition-colors cursor-not-allowed opacity-50">Research</button>
           </div>
         </div>
         <div className="flex items-center gap-4">
-          <button className="material-symbols-outlined text-outline hover:bg-surface-container p-2 rounded-lg transition-all duration-300 scale-95 active:scale-90">settings</button>
-          <button className="material-symbols-outlined text-outline hover:bg-surface-container p-2 rounded-lg transition-all duration-300 scale-95 active:scale-90">account_circle</button>
+          <button className="material-symbols-outlined text-outline hover:bg-[#1c2026] p-2 rounded-lg transition-all duration-300 scale-95 active:scale-90">settings</button>
+          <button className="material-symbols-outlined text-outline hover:bg-[#1c2026] p-2 rounded-lg transition-all duration-300 scale-95 active:scale-90">account_circle</button>
         </div>
       </nav>
 
@@ -421,12 +421,12 @@ return (
       </main>
 
       {/* Footer */}
-      <footer className="fixed bottom-0 left-0 right-0 z-50 bg-surface-container-lowest h-8 flex justify-between items-center px-6 border-t border-outline-variant/15">
-        <span className="font-mono text-[10px] uppercase tracking-widest text-secondary-container">SYSTEM STATUS: OPERATIONAL // LATENCY 12MS</span>
+      <footer className="fixed bottom-0 left-0 right-0 z-50 bg-[#0a0e14] h-8 flex justify-between items-center px-6 border-t border-[#3b494b]/15">
+        <span className="font-mono text-[10px] uppercase tracking-widest text-[#05e777]">SYSTEM STATUS: OPERATIONAL // LATENCY 12MS</span>
         <div className="flex items-center gap-4 font-mono text-[10px] uppercase tracking-widest">
-          <a className="text-outline hover:text-primary-container transition-colors" href="#">API status</a>
-          <a className="text-outline hover:text-primary-container transition-colors" href="#">Grok v2</a>
-          <a className="text-outline hover:text-primary-container transition-colors" href="#">Gemini Pro</a>
+          <a className="text-[#849495] hover:text-[#00F0FF] transition-colors" href="#">API status</a>
+          <a className="text-[#849495] hover:text-[#00F0FF] transition-colors" href="#">Grok v2</a>
+          <a className="text-[#849495] hover:text-[#00F0FF] transition-colors" href="#">Gemini Pro</a>
         </div>
       </footer>
 
@@ -458,7 +458,7 @@ return (
                 </div>
               </div>
               <div className="mt-10 flex gap-4">
-                <button onClick={async () => { await handleSaveKeys(); setApiModalOpen(false); }} className="flex-grow py-4 bg-primary text-on-primary text-xs font-black uppercase tracking-[0.2em] rounded-lg hover:brightness-110 transition-colors">UPDATE VAULT</button>
+                <button onClick={() => { handleSaveKeys(); setApiModalOpen(false); }} className="flex-grow py-4 bg-primary text-on-primary text-xs font-black uppercase tracking-[0.2em] rounded-lg hover:brightness-110 transition-colors">UPDATE VAULT</button>
               </div>
             </div>
           </div>

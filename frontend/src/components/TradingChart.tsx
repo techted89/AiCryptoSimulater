@@ -185,7 +185,7 @@ export default function TradingChart({ activeTrades = [], historyTrades = [] }: 
                     )}
                     className={`px-2 py-0.5 text-[10px] rounded border transition-colors uppercase ${
                       activeIndicators.includes(indicator)
-                        ? 'bg-primary-container/20 border-primary-container text-primary-fixed-dim'
+                        ? 'bg-blue-900/50 border-blue-500 text-blue-300'
                         : 'bg-surface-container-highest border-outline-variant/30 text-outline hover:bg-surface-variant'
                     }`}
                   >
@@ -242,7 +242,7 @@ export default function TradingChart({ activeTrades = [], historyTrades = [] }: 
             <div className="flex flex-col-reverse gap-0.5">
               {l2Book?.asks.map((ask, i) => (
                 <div key={`ask-${i}`} className="flex justify-between text-error relative">
-                   <div className="absolute right-0 top-0 h-full bg-error-container/20" style={{width: `${(ask[1]/5)*100}%`}}></div>
+                   <div className="absolute right-0 top-0 h-full bg-rose-900/20" style={{width: `${(ask[1]/5)*100}%`}}></div>
                    <span>${ask[0].toFixed(2)}</span>
                    <span>{ask[1].toFixed(3)}</span>
                 </div>
