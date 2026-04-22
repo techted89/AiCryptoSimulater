@@ -21,8 +21,12 @@ body {
   background: rgba(49, 53, 60, 0.6);
 }
 
+.no-scrollbar {
+  -ms-overflow-style: none; /* IE and Edge */
+  scrollbar-width: none; /* Firefox */
+}
 .no-scrollbar::-webkit-scrollbar {
-  display: none;
+  display: none; /* Chrome, Safari and Opera */
 }
 
 .ticker-data {
