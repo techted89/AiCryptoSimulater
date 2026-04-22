@@ -34,6 +34,7 @@ interface Trade {
 }
 
 export default function Home() {
+  const [activeTab, setActiveTab] = useState('dashboard');
   const [stats, setStats] = useState<AgentStats | null>(null);
   const [activeTrades, setActiveTrades] = useState<Trade[]>([]);
   const [historyTrades, setHistoryTrades] = useState<Trade[]>([]);
@@ -42,6 +43,7 @@ export default function Home() {
   const [researcherKey, setResearcherKey] = useState('');
   const [groqKey, setGroqKey] = useState('');
   const [keysSaved, setKeysSaved] = useState(false);
+  const [apiModalOpen, setApiModalOpen] = useState(false);
 
   // Determine dynamic base URLs for the backend API and WS
   const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
@@ -173,222 +175,295 @@ export default function Home() {
     }
   };
 
-  return (
-    <main className="min-h-screen bg-slate-950 text-slate-200 p-8">
-      <div className="max-w-7xl mx-auto space-y-8">
+return (
+    <div className="bg-background text-on-background min-h-screen selection:bg-primary-container selection:text-on-primary-container flex flex-col">
+      {/* TopNavBar */}
+      <nav className="flex justify-between items-center w-full px-6 py-3 h-16 bg-gradient-to-r from-surface-container to-surface-container-lowest z-50 fixed top-0 border-b border-outline-variant/10">
+        <div className="flex items-center gap-8">
+          <span className="text-xl font-bold tracking-tighter text-primary uppercase font-headline">KINETIC VAULT</span>
+          <div className="hidden md:flex gap-6 items-center font-label text-sm uppercase tracking-wider">
+            <button
+              onClick={() => setActiveTab('dashboard')}
+              className={`transition-colors ${activeTab === 'dashboard' ? 'text-primary-container border-b-2 border-primary-container pb-1' : 'text-outline hover:text-primary'}`}>
+              Dashboard
+            </button>
+            <button className="text-outline hover:text-primary transition-colors cursor-not-allowed opacity-50">History</button>
+            <button
+              onClick={() => setActiveTab('strategy')}
+              className={`transition-colors ${activeTab === 'strategy' ? 'text-primary-container border-b-2 border-primary-container pb-1' : 'text-outline hover:text-primary'}`}>
+              Strategy
+            </button>
+            <button className="text-outline hover:text-primary transition-colors cursor-not-allowed opacity-50">Research</button>
+          </div>
+        </div>
+        <div className="flex items-center gap-4">
+          <button className="material-symbols-outlined text-outline hover:bg-surface-container p-2 rounded-lg transition-all duration-300 scale-95 active:scale-90">settings</button>
+          <button className="material-symbols-outlined text-outline hover:bg-surface-container p-2 rounded-lg transition-all duration-300 scale-95 active:scale-90">account_circle</button>
+        </div>
+      </nav>
 
-        {stats?.circuit_breaker_active && (
-          <div className="bg-rose-900/50 border border-rose-500 rounded-lg p-4 flex items-center gap-4 animate-pulse">
-            <AlertTriangle className="text-rose-400 w-6 h-6" />
-            <div>
-              <h3 className="text-rose-400 font-bold">CIRCUIT BREAKER TRIGGERED</h3>
-              <p className="text-rose-200 text-sm">Max drawdown exceeded 15%. All automated entries halted to protect capital.</p>
+      {/* Main Content */}
+      <main className="pt-20 pb-12 px-4 md:px-6 flex-grow">
+        {activeTab === 'dashboard' && (
+          <div className="grid grid-cols-12 gap-4">
+            {stats?.circuit_breaker_active && (
+              <div className="col-span-12 bg-error-container/20 border border-error rounded-xl p-4 flex items-center gap-4 animate-pulse">
+                <AlertTriangle className="text-error w-6 h-6" />
+                <div>
+                  <h3 className="text-error font-bold font-headline uppercase">CIRCUIT BREAKER TRIGGERED</h3>
+                  <p className="text-on-error-container text-sm">Max drawdown exceeded 15%. All automated entries halted to protect capital.</p>
+                </div>
+              </div>
+            )}
+
+            {/* Left Column: Agent Stats & Status */}
+            <div className="col-span-12 lg:col-span-3 flex flex-col gap-4">
+              {/* God Mode Active Control */}
+              <div className="bg-surface-container rounded-xl p-5 border-l-4 border-primary shadow-lg shadow-primary-container/5">
+                <div className="flex justify-between items-start mb-4">
+                  <div>
+                    <h2 className="text-xs font-bold uppercase tracking-widest text-primary mb-1">System Status</h2>
+                    <p className="text-xl font-headline font-bold text-on-surface">GOD MODE ACTIVE</p>
+                  </div>
+                  <span className="material-symbols-outlined text-primary text-3xl" style={{ fontVariationSettings: "'FILL' 1" }}>bolt</span>
+                </div>
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-outline">AUTO-HEDGE</span>
+                    <span className="text-secondary font-bold">ENGAGED</span>
+                  </div>
+                  <div className="w-full bg-surface-container-highest h-1 rounded-full overflow-hidden">
+                    <div className="bg-primary-container h-full shadow-[0_0_8px_rgba(0,240,255,0.6)]" style={{width: '80%'}}></div>
+                  </div>
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-outline">BALANCE</span>
+                    <span className="text-on-surface font-mono">${stats?.balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0.00'}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-outline">WALLET VALUE</span>
+                    <span className="text-on-surface font-mono">${stats?.wallet_value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0.00'}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Agent Performance Bento */}
+              <div className="bg-surface-container-low rounded-xl p-4 flex flex-col gap-4">
+                <h3 className="text-xs font-bold uppercase tracking-widest text-outline">Agent Neural Metrics</h3>
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between p-3 bg-surface-container rounded-lg border border-outline-variant/10">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded bg-secondary/10 flex items-center justify-center text-secondary">
+                        <span className="material-symbols-outlined text-sm">psychology</span>
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold text-on-surface">Alpha-Neural V2</p>
+                        <p className="text-[10px] text-outline">Trades Closed: {stats?.total_closed_trades || 0}</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className={`text-xs font-mono font-bold ${stats && stats.floating_pnl >= 0 ? 'text-secondary' : 'text-error'}`}>
+                        {stats && stats.floating_pnl >= 0 ? '+' : ''}${stats?.floating_pnl.toFixed(2) || '0.00'} PnL
+                      </p>
+                      <p className="text-[10px] text-outline uppercase">Win Rate: {stats?.win_rate.toFixed(1) || '0'}%</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between p-3 bg-surface-container rounded-lg border border-outline-variant/10">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded bg-tertiary-container/10 flex items-center justify-center text-tertiary-fixed-dim">
+                        <span className="material-symbols-outlined text-sm">monitoring</span>
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold text-on-surface">Risk Metrics</p>
+                        <p className="text-[10px] text-outline">Sharpe: {stats?.sharpe_ratio.toFixed(2) || '0.00'}</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs font-mono font-bold text-error">Max DD: {stats?.max_drawdown.toFixed(2) || '0'}%</p>
+                      <p className="text-[10px] text-outline uppercase">Stability: 99.9%</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Reset Wallet / Force Admin */}
+              <div className="bg-surface-container rounded-xl overflow-hidden p-4">
+                 <button
+                    onClick={() => handleControlAction('reset_wallet')}
+                    disabled={loading || !adminToken}
+                    className="w-full py-2 bg-surface-container-highest text-on-surface font-bold uppercase tracking-widest rounded text-xs flex items-center justify-center gap-2 hover:bg-surface-variant transition-all disabled:opacity-50"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                    Reset Wallet
+                  </button>
+              </div>
+            </div>
+
+            {/* Middle Column: Main Chart (TradingChart inside) */}
+            <div className="col-span-12 lg:col-span-6 flex flex-col gap-4">
+               <TradingChart activeTrades={activeTrades} historyTrades={historyTrades} />
+            </div>
+
+            {/* Right Column: L2 Order Book & Execution */}
+            <div className="col-span-12 lg:col-span-3 flex flex-col gap-4">
+              {/* Order Entry Module */}
+              <div className="glass-panel rounded-xl p-5 border border-outline-variant/10">
+                <h3 className="text-xs font-bold uppercase tracking-widest text-primary mb-4">Terminal Execution</h3>
+                <div className="grid grid-cols-2 gap-2 mb-4">
+                  <button onClick={() => handleControlAction('trigger_trade')} disabled={loading || !adminToken} className="py-2 bg-secondary text-on-secondary font-bold uppercase tracking-widest rounded text-xs shadow-[0_4px_12px_rgba(5,231,119,0.2)] disabled:opacity-50 flex justify-center items-center gap-1"><Zap className="w-3 h-3"/> Long</button>
+                  <button onClick={() => handleControlAction('close_trade')} disabled={loading || !adminToken || activeTrades.length === 0} className="py-2 bg-surface-container-highest text-on-surface font-bold uppercase tracking-widest rounded text-xs disabled:opacity-50 flex justify-center items-center gap-1"><XCircle className="w-3 h-3"/> Exit</button>
+                </div>
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-[10px] text-outline uppercase font-bold tracking-widest mb-1 block">Quick Execution Mode</label>
+                    <input readOnly className="w-full bg-surface-container-highest/50 border-0 border-b border-outline/20 focus:border-primary-fixed-dim focus:ring-0 text-sm font-mono p-2 rounded cursor-not-allowed text-outline" type="text" value="Market Order Active" />
+                  </div>
+                </div>
+              </div>
+
+              {/* We will let TradingChart render the L2 depth in a simplified way, or extract it here later if needed. For now TradingChart manages L2 inside it. To match the UI, let's keep it clean or just wrap AgentTerminal here */}
+              <div className="flex-1 bg-surface-container-low rounded-xl border border-outline-variant/10 overflow-hidden min-h-[300px]">
+                 <AgentTerminal />
+              </div>
+
             </div>
           </div>
         )}
 
-        <header className="flex justify-between items-center border-b border-slate-800 pb-4">
-          <div>
-            <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-emerald-400 to-blue-500">
-              AI Trading Simulator
-            </h1>
-            <p className="text-slate-400 text-sm mt-1">Live Stream Dashboard & Agent Controls</p>
-          </div>
-          <div className="flex items-center space-x-2 bg-slate-900 px-4 py-2 rounded-full border border-slate-800">
-            <Activity className="w-4 h-4 text-emerald-400 animate-pulse" />
-            <span className="text-sm font-medium text-emerald-400">System Online</span>
-          </div>
-        </header>
+        {activeTab === 'strategy' && (
+           <div className="max-w-7xl mx-auto grid grid-cols-12 gap-6 pt-4">
+             {/* Header Section */}
+             <header className="col-span-12 mb-4">
+               <div className="flex items-end gap-3">
+                 <h1 className="font-headline text-4xl font-bold tracking-tight text-primary">STRATEGY ARCHITECT</h1>
+                 <div className="h-[2px] flex-grow bg-outline-variant opacity-20 mb-3"></div>
+                 <div className="px-3 py-1 bg-surface-container-highest text-secondary font-mono text-[10px] tracking-widest uppercase border-l-2 border-secondary-container">V4.2.0-STABLE</div>
+               </div>
+             </header>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+             {/* Sidebar: Asset Selection & Controls */}
+             <aside className="col-span-12 lg:col-span-4 space-y-6">
+               <section className="bg-surface-container rounded-xl p-6 relative overflow-hidden border-b-4 border-primary/20">
+                 <div className="flex items-center justify-between mb-6">
+                   <h2 className="font-headline text-lg font-medium text-on-surface">ASSET SELECTION</h2>
+                   <span className="material-symbols-outlined text-primary-fixed-dim">token</span>
+                 </div>
+                 <div className="space-y-3">
+                   <div className="bg-surface-container-high p-4 flex items-center justify-between hover:bg-surface-container-highest transition-colors cursor-pointer group">
+                     <div className="flex items-center gap-4">
+                       <div className="w-10 h-10 bg-surface-container-highest rounded-full flex items-center justify-center">
+                         <span className="material-symbols-outlined text-secondary" style={{ fontVariationSettings: "'FILL' 1" }}>currency_bitcoin</span>
+                       </div>
+                       <div>
+                         <div className="font-headline font-bold text-on-surface">BTC / USDT</div>
+                         <div className="text-xs text-outline monospaced">Active</div>
+                       </div>
+                     </div>
+                     <div className="text-right">
+                        <div className="monospaced text-secondary text-sm">${stats?.wallet_value.toLocaleString(undefined, { minimumFractionDigits: 2 }) || '---'}</div>
+                     </div>
+                   </div>
+                 </div>
+               </section>
 
-          {/* Left Column: Charts & Terminal */}
-          <div className="lg:col-span-2 space-y-6">
-            <TradingChart />
-            <AgentTerminal />
-          </div>
+               <section className="bg-surface-container-lowest p-6 rounded-xl border border-outline-variant/10">
+                 <div className="flex items-center gap-3 mb-4">
+                   <div className="w-2 h-2 bg-secondary rounded-full animate-pulse shadow-[0_0_8px_rgba(5,231,119,0.6)]"></div>
+                   <span className="text-xs text-on-surface-variant font-mono tracking-widest">REAL-TIME EXECUTION ENGINE</span>
+                 </div>
+                 <AgentTerminal />
+               </section>
+             </aside>
 
-          {/* Right Column: God Mode Controls */}
-          <div className="space-y-6">
+             {/* Main Configuration Area */}
+             <div className="col-span-12 lg:col-span-8 space-y-6">
+               <StrategyAnalysisPanel />
 
-            {/* Wallet Status & Advanced Stats */}
-            <div className="bg-slate-900 p-6 rounded-xl border border-slate-800 shadow-lg">
-              <h2 className="text-lg font-semibold text-white mb-4">Actor Agent State</h2>
+               {/* API Configuration Section */}
+               <div className="bg-surface-container rounded-xl overflow-hidden">
+                 <div className="bg-surface-container-high px-6 py-4 flex justify-between items-center">
+                   <div className="flex items-center gap-2">
+                     <span className="material-symbols-outlined text-tertiary-fixed-dim">api</span>
+                     <h2 className="font-headline font-bold tracking-wide">LLM ENGINE CONNECTORS</h2>
+                   </div>
+                   <div className="flex items-center gap-4">
+                     <div className="text-[10px] font-mono text-outline uppercase">Active: Gemini Pro</div>
+                   </div>
+                 </div>
 
-              <div className="grid grid-cols-2 gap-4 mb-4">
-                <div className="bg-slate-950 p-4 rounded-lg border border-slate-800">
-                  <p className="text-slate-400 text-xs uppercase tracking-wider">Est. Wallet Value</p>
-                  <p className="text-2xl font-bold text-emerald-400 mt-1">
-                    ${stats?.wallet_value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '---'}
-                  </p>
-                  <p className={`text-xs mt-1 ${stats && stats.floating_pnl >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
-                    Float PnL: ${stats?.floating_pnl.toFixed(2) || '0.00'}
-                  </p>
+                 <div className="p-8 space-y-6">
+                   <div className="flex flex-col md:flex-row gap-6 items-start md:items-center bg-surface-container-high p-6 rounded-xl border-l-4 border-secondary shadow-lg relative overflow-hidden">
+                     <div className="absolute top-0 right-0 w-32 h-32 bg-secondary/5 blur-3xl rounded-full translate-x-16 -translate-y-16"></div>
+                     <div className="w-16 h-16 bg-surface-container-highest flex items-center justify-center rounded-xl border border-secondary/30">
+                        <span className="material-symbols-outlined text-3xl text-secondary">smart_toy</span>
+                     </div>
+                     <div className="flex-grow">
+                       <div className="flex items-center gap-2 mb-1">
+                         <h4 className="font-headline font-bold text-primary">Gemini 1.5 Pro</h4>
+                         <span className="text-[10px] bg-secondary-container/20 px-2 py-0.5 rounded text-secondary uppercase monospaced">Active</span>
+                       </div>
+                       <p className="text-xs text-on-surface-variant">Technical analysis and order orchestration agent.</p>
+                     </div>
+                     <div className="w-full md:w-auto flex gap-3">
+                       <button onClick={() => setApiModalOpen(true)} className="flex-grow md:flex-none px-6 py-2 bg-secondary text-on-secondary text-[10px] font-extrabold uppercase hover:shadow-[0_0_15px_rgba(5,231,119,0.3)] transition-all rounded">Edit Keys</button>
+                     </div>
+                   </div>
+                 </div>
+               </div>
+
+               <div className="flex flex-col sm:flex-row gap-4 pt-4">
+                 <button onClick={handleSaveKeys} className="flex-grow h-14 bg-gradient-to-r from-primary to-primary-container text-on-primary font-headline font-bold text-lg uppercase tracking-widest rounded-xl hover:brightness-110 transition-all active:scale-95 shadow-[0_8px_30px_rgb(0,240,255,0.15)]">
+                   INITIALIZE STRATEGY
+                 </button>
+               </div>
+             </div>
+           </div>
+        )}
+      </main>
+
+      {/* Footer */}
+      <footer className="fixed bottom-0 left-0 right-0 z-50 bg-surface-container-lowest h-8 flex justify-between items-center px-6 border-t border-outline-variant/15">
+        <span className="font-mono text-[10px] uppercase tracking-widest text-secondary-container">SYSTEM STATUS: OPERATIONAL // LATENCY 12MS</span>
+        <div className="flex items-center gap-4 font-mono text-[10px] uppercase tracking-widest">
+          <a className="text-outline hover:text-primary-container transition-colors" href="#">API status</a>
+          <a className="text-outline hover:text-primary-container transition-colors" href="#">Grok v2</a>
+          <a className="text-outline hover:text-primary-container transition-colors" href="#">Gemini Pro</a>
+        </div>
+      </footer>
+
+      {/* Settings Modal (Overlay simulation) */}
+      {apiModalOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-6" id="api-modal">
+          <div className="absolute inset-0 bg-background/80 backdrop-blur-md" onClick={() => setApiModalOpen(false)}></div>
+          <div className="relative glass-panel w-full max-w-lg rounded-2xl border border-outline-variant/30 shadow-2xl overflow-hidden">
+            <div className="p-8">
+              <div className="flex justify-between items-center mb-8">
+                <div>
+                  <h2 className="font-headline text-2xl font-bold text-primary">API KEY MANAGER</h2>
+                  <p className="text-xs text-outline uppercase tracking-widest mt-1">Encrypted Vault Storage</p>
                 </div>
-                <div className="bg-slate-950 p-4 rounded-lg border border-slate-800">
-                  <p className="text-slate-400 text-xs uppercase tracking-wider">Win Rate</p>
-                  <p className="text-2xl font-bold text-blue-400 mt-1">
-                    {stats?.win_rate.toFixed(1) || '0'}%
-                  </p>
-                  <p className="text-slate-500 text-xs mt-1">{stats?.total_closed_trades || 0} Trades Closed</p>
-                </div>
+                <button onClick={() => setApiModalOpen(false)} className="material-symbols-outlined text-outline hover:text-primary transition-colors">close</button>
               </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="bg-slate-950 p-3 rounded-lg border border-slate-800 flex justify-between items-center">
-                  <p className="text-slate-400 text-xs uppercase tracking-wider">Max Drawdown</p>
-                  <p className="text-sm font-bold text-rose-400">{stats?.max_drawdown.toFixed(2) || '0'}%</p>
-                </div>
-                <div className="bg-slate-950 p-3 rounded-lg border border-slate-800 flex justify-between items-center">
-                  <p className="text-slate-400 text-xs uppercase tracking-wider">Sharpe</p>
-                  <p className="text-sm font-bold text-purple-400">{stats?.sharpe_ratio.toFixed(2) || '0.00'}</p>
-                </div>
-              </div>
-            </div>
-
-
-            {/* Admin Controls */}
-            {adminToken ? (
-            <div className="bg-slate-900 p-6 rounded-xl border border-slate-800 shadow-lg border-l-4 border-l-rose-500">
-              <h2 className="text-lg font-semibold text-white mb-4 flex items-center">
-                God Mode Controls
-              </h2>
-
-              <div className="space-y-3 mb-6 border-b border-slate-800 pb-4">
-                <h3 className="text-sm font-semibold text-slate-300">Gemini API Keys</h3>
-                <input
-                  type="password"
-                  placeholder="Actor Agent Key"
-                  value={actorKey}
-                  onChange={(e) => setActorKey(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 text-slate-300 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500"
-                />
-                <input
-                  type="password"
-                  placeholder="Researcher Agent Key"
-                  value={researcherKey}
-                  onChange={(e) => setResearcherKey(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 text-slate-300 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500"
-                />
-                <input
-                  type="password"
-                  placeholder="Groq API Key (Actor Fallback)"
-                  value={groqKey}
-                  onChange={(e) => setGroqKey(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 text-slate-300 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500"
-                />
-                <button
-                  onClick={handleSaveKeys}
-                  disabled={loading}
-                  className="w-full flex items-center justify-center space-x-2 bg-emerald-600 hover:bg-emerald-700 text-white py-2 rounded-lg font-medium text-sm transition-colors disabled:opacity-50"
-                >
-                  <span>{keysSaved ? 'Saved!' : 'Save Keys'}</span>
-                </button>
-              </div>
-
-              <div className="space-y-3">
-
-                <div className="grid grid-cols-2 gap-3">
-                  <button
-                    onClick={() => handleControlAction('trigger_trade')}
-                    disabled={loading}
-                    className="w-full flex items-center justify-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg font-medium text-sm transition-colors disabled:opacity-50"
-                  >
-                    <Zap className="w-4 h-4" />
-                    <span>Force Entry</span>
-                  </button>
-                  <button
-                    onClick={() => handleControlAction('close_trade')}
-                    disabled={loading || activeTrades.length === 0}
-                    className="w-full flex items-center justify-center space-x-2 bg-orange-600 hover:bg-orange-700 text-white py-3 rounded-lg font-medium text-sm transition-colors disabled:opacity-50"
-                  >
-                    <XCircle className="w-4 h-4" />
-                    <span>Force Exit</span>
-                  </button>
-                </div>
-                <button
-                  onClick={() => handleControlAction('reset_wallet')}
-                  disabled={loading}
-                  className="w-full flex items-center justify-center space-x-2 bg-slate-800 hover:bg-slate-700 text-rose-400 border border-slate-700 py-3 rounded-lg font-medium transition-colors disabled:opacity-50"
-                >
-                  <RefreshCw className="w-4 h-4" />
-                  <span>Reset Wallet Balance</span>
-                </button>
-              </div>
-            </div>
-            ) : (
-              <div className="bg-slate-900 p-6 rounded-xl border border-slate-800 shadow-lg border-l-4 border-l-slate-700 opacity-50">
-                <h2 className="text-lg font-semibold text-white mb-4 flex items-center">
-                  God Mode Controls (Disabled)
-                </h2>
-                <p className="text-sm text-slate-400">Configure NEXT_PUBLIC_ADMIN_TOKEN to enable admin controls.</p>
-              </div>
-            )}
-
-            {/* Active & Recent Trades */}
-            <div className="bg-slate-900 p-6 rounded-xl border border-slate-800 shadow-lg h-[350px] overflow-hidden flex flex-col">
-              <h2 className="text-lg font-semibold text-white mb-4">Trade Breakdown</h2>
-              <div className="overflow-y-auto flex-1 space-y-4 pr-2">
-
-                {/* Active Trades */}
-                {activeTrades.length > 0 && (
-                  <div className="space-y-2">
-                    <h3 className="text-xs text-slate-400 uppercase tracking-wider font-semibold border-b border-slate-800 pb-1">Active Positions ({activeTrades.length})</h3>
-                    {activeTrades.map((trade) => (
-                      <div key={trade.id} className="bg-slate-950 p-3 rounded-lg border border-blue-900/50 relative overflow-hidden text-sm">
-                        <div className="absolute top-0 left-0 w-1 h-full bg-blue-500 animate-pulse"></div>
-                        <div className="flex justify-between items-center mb-1 pl-2">
-                          <span className="font-semibold text-blue-400">{trade.symbol} <span className="text-xs text-slate-500 ml-1">OPEN</span></span>
-                          <span className="text-xs text-slate-400">Entry: ${trade.entry_price.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits:2})}</span>
-                        </div>
-                        <div className="flex justify-between text-slate-500 text-[10px] pl-2 mt-1 border-t border-slate-800 pt-1">
-                          <span>Fee: ${trade.fee_usd?.toFixed(2)}</span>
-                          <span>Slip: {trade.slippage_pct ? (trade.slippage_pct*100).toFixed(3) : '0'}%</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* Historical Trades */}
+              <div className="space-y-6">
                 <div className="space-y-2">
-                  <h3 className="text-xs text-slate-400 uppercase tracking-wider font-semibold border-b border-slate-800 pb-1">Trade History</h3>
-                  {historyTrades.length === 0 ? (
-                    <p className="text-slate-500 text-xs text-center mt-4">No closed trades.</p>
-                  ) : (
-                    historyTrades.map((trade) => (
-                      <div key={trade.id} className="bg-slate-950 p-3 rounded-lg border border-slate-800 text-sm">
-                        <div className="flex justify-between items-center mb-1">
-                          <span className="font-semibold text-slate-300">{trade.symbol}</span>
-                          <span className={`px-2 py-0.5 rounded text-[10px] uppercase tracking-wider font-bold ${trade.pnl && trade.pnl > 0 ? 'bg-emerald-900/50 text-emerald-400' : 'bg-rose-900/50 text-rose-400'}`}>
-                            {trade.pnl && trade.pnl > 0 ? 'WIN' : 'LOSS'}
-                          </span>
-                        </div>
-                        <div className="flex justify-between text-slate-400 text-xs">
-                          <span>In: ${trade.entry_price.toLocaleString(undefined, {maximumFractionDigits:2})}</span>
-                          <span>Out: ${trade.exit_price?.toLocaleString(undefined, {maximumFractionDigits:2})}</span>
-                        </div>
-                        <div className="flex justify-between mt-2 text-xs border-t border-slate-800 pt-1">
-                           <span className="text-slate-500">Fees: ${(trade.fee_usd! + (trade.exit_fee_usd || 0)).toFixed(2)}</span>
-                           <span className={`font-bold ${trade.pnl && trade.pnl >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
-                             {trade.pnl && trade.pnl >= 0 ? '+' : ''}{trade.pnl?.toFixed(2)}
-                           </span>
-                        </div>
-                      </div>
-                    ))
-                  )}
+                  <label className="text-[10px] font-bold text-on-surface-variant uppercase monospaced">Actor Agent Key</label>
+                  <input type="password" value={actorKey} onChange={(e) => setActorKey(e.target.value)} className="w-full bg-surface-container-lowest border border-outline-variant/30 rounded-lg px-4 py-3 text-sm monospaced focus:border-primary-container outline-none transition-all text-on-surface" />
                 </div>
-
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-on-surface-variant uppercase monospaced">Researcher Agent Key</label>
+                  <input type="password" value={researcherKey} onChange={(e) => setResearcherKey(e.target.value)} className="w-full bg-surface-container-lowest border border-outline-variant/30 rounded-lg px-4 py-3 text-sm monospaced focus:border-primary-container outline-none transition-all text-on-surface" />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-on-surface-variant uppercase monospaced">Groq Fallback Key</label>
+                  <input type="password" value={groqKey} onChange={(e) => setGroqKey(e.target.value)} className="w-full bg-surface-container-lowest border border-outline-variant/30 rounded-lg px-4 py-3 text-sm monospaced focus:border-primary-container outline-none transition-all text-on-surface" />
+                </div>
+              </div>
+              <div className="mt-10 flex gap-4">
+                <button onClick={async () => { await handleSaveKeys(); setApiModalOpen(false); }} className="flex-grow py-4 bg-primary text-on-primary text-xs font-black uppercase tracking-[0.2em] rounded-lg hover:brightness-110 transition-colors">UPDATE VAULT</button>
               </div>
             </div>
-
           </div>
         </div>
-
-        {/* Strategy & Analysis Row */}
-        <StrategyAnalysisPanel />
-
-      </div>
-    </main>
+      )}
+    </div>
   );
 }
