@@ -22,9 +22,9 @@ export default function StrategyAnalysisPanel() {
     if (!analysis?.text) return null;
     return analysis.text.split('\n').map((line, i) => {
       if (!line.trim()) return <br key={i} />;
-      let color = "text-slate-300";
-      if (/bullish|favorable/i.test(line)) color = "text-emerald-400";
-      if (/bearish|caution/i.test(line)) color = "text-rose-400";
+      let color = "text-on-surface-variant";
+      if (/bullish|favorable/i.test(line)) color = "text-secondary";
+      if (/bearish|caution/i.test(line)) color = "text-error";
       if (/recommendation:/i.test(line)) return <p key={i} className={"mt-2 font-bold " + color}>{line}</p>;
       return <p key={i} className={color}>{line}</p>;
     });
@@ -53,34 +53,34 @@ export default function StrategyAnalysisPanel() {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
       {/* Strategy Details */}
-      <div className="bg-slate-900 p-6 rounded-xl border border-slate-800 shadow-lg">
-        <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-          <Target className="w-5 h-5 text-purple-400" />
+      <div className="bg-surface-container p-6 rounded-xl border border-outline-variant/20 shadow-lg">
+        <h2 className="text-lg font-semibold text-on-surface mb-4 flex items-center gap-2">
+          <Target className="w-5 h-5 text-tertiary-fixed-dim" />
           Trade Strategy Details
         </h2>
         {strategy ? (
           <div className="space-y-4">
             <div>
-              <p className="text-slate-400 text-xs uppercase tracking-wider">Strategy Name</p>
-              <p className="text-white font-medium">{strategy.name}</p>
+              <p className="text-outline text-xs uppercase tracking-wider">Strategy Name</p>
+              <p className="text-on-surface font-medium">{strategy.name}</p>
             </div>
             <div>
-              <p className="text-slate-400 text-xs uppercase tracking-wider">Description</p>
-              <p className="text-slate-300 text-sm mt-1">{strategy.description}</p>
+              <p className="text-outline text-xs uppercase tracking-wider">Description</p>
+              <p className="text-on-surface-variant text-sm mt-1">{strategy.description}</p>
             </div>
             <div className="flex gap-4">
               <div>
-                <p className="text-slate-400 text-xs uppercase tracking-wider mb-1">Indicators</p>
+                <p className="text-outline text-xs uppercase tracking-wider mb-1">Indicators</p>
                 <div className="flex flex-wrap gap-2">
                   {strategy.indicators.map((ind, i) => (
-                    <span key={i} className="bg-purple-900/50 text-purple-300 text-[10px] px-2 py-1 rounded border border-purple-800">
+                    <span key={i} className="bg-tertiary-fixed-dim/10 text-tertiary-fixed-dim text-[10px] px-2 py-1 rounded border border-tertiary-fixed-dim/20">
                       {ind}
                     </span>
                   ))}
                 </div>
               </div>
               <div>
-                <p className="text-slate-400 text-xs uppercase tracking-wider mb-1">Risk Profile</p>
+                <p className="text-outline text-xs uppercase tracking-wider mb-1">Risk Profile</p>
                 <span className="bg-orange-900/50 text-orange-400 text-[10px] px-2 py-1 rounded border border-orange-800 uppercase font-bold">
                   {strategy.risk_profile}
                 </span>
@@ -88,23 +88,23 @@ export default function StrategyAnalysisPanel() {
             </div>
           </div>
         ) : (
-          <p className="text-slate-500 text-sm animate-pulse">Loading strategy...</p>
+          <p className="text-outline text-sm animate-pulse">Loading strategy...</p>
         )}
       </div>
 
       {/* Market Analysis Feed */}
-      <div className="bg-slate-900 p-6 rounded-xl border border-slate-800 shadow-lg">
-        <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-          <BookOpen className="w-5 h-5 text-sky-400" />
+      <div className="bg-surface-container p-6 rounded-xl border border-outline-variant/20 shadow-lg">
+        <h2 className="text-lg font-semibold text-on-surface mb-4 flex items-center gap-2">
+          <BookOpen className="w-5 h-5 text-primary" />
           Real-Time Market Analysis
         </h2>
         {analysis ? (
-          <div className="bg-slate-950 rounded-lg border border-slate-800 p-4 h-[200px] overflow-y-auto font-mono text-sm">
+          <div className="bg-surface-container-lowest rounded-lg border border-outline-variant/20 p-4 h-[200px] overflow-y-auto font-mono text-sm">
             {analysisLines}
           </div>
         ) : (
-          <div className="h-[200px] bg-slate-950 rounded-lg border border-slate-800 flex items-center justify-center">
-            <p className="text-slate-500 text-sm animate-pulse">Analyzing market data...</p>
+          <div className="h-[200px] bg-surface-container-lowest rounded-lg border border-outline-variant/20 flex items-center justify-center">
+            <p className="text-outline text-sm animate-pulse">Analyzing market data...</p>
           </div>
         )}
       </div>
