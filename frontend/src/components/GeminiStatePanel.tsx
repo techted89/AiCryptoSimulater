@@ -3,10 +3,19 @@
 import React from 'react';
 import { Database, Activity } from 'lucide-react';
 
+export interface Snapshot {
+    timestamp: string | number;
+    success?: string;
+    price?: number;
+    rsi?: number;
+    macd?: number;
+    news?: string;
+}
+
 interface GeminiStatePanelProps {
   data: {
     db_size: number;
-    recent_snapshots: any[];
+    recent_snapshots: Snapshot[];
   } | undefined;
 }
 
@@ -42,9 +51,9 @@ export default function GeminiStatePanel({ data }: GeminiStatePanelProps) {
                                     </span>
                                 </div>
                                 <div className="text-on-surface-variant flex gap-2 flex-wrap">
-                                    <span>Price: ${snap.price.toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
-                                    <span>RSI: {snap.rsi.toFixed(1)}</span>
-                                    <span>MACD: {snap.macd.toFixed(2)}</span>
+                                    <span>Price: ${snap.price != null ? snap.price.toLocaleString(undefined, {minimumFractionDigits: 2}) : '---'}</span>
+                                    <span>RSI: {snap.rsi != null ? snap.rsi.toFixed(1) : '---'}</span>
+                                    <span>MACD: {snap.macd != null ? snap.macd.toFixed(2) : '---'}</span>
                                     {snap.news && snap.news !== "Neutral" && <span className="text-orange-400">News: {snap.news}</span>}
                                 </div>
                             </div>

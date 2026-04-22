@@ -23,13 +23,24 @@ export default function GroqStrategyPanel({ data }: GroqStatePanelProps) {
 
   const analysisLines = useMemo(() => {
     if (!data?.latest_analysis) return null;
-    return data.latest_analysis.split('\n').map((line, i) => {
+    return data.latest_analysis.split('
+').map((line, i) => {
       if (!line.trim()) return <br key={i} />;
-      let color = "text-on-surface-variant";
-      if (/bullish|favorable|buy/i.test(line)) color = "text-secondary";
-      if (/bearish|caution|sell|pressure/i.test(line)) color = "text-error";
-      if (/recommendation:/i.test(line)) return <p key={i} className={"mt-2 font-bold " + color}>{line}</p>;
-      return <p key={i} className={color}>{line}</p>;
+      let colorClass = "text-on-surface-variant";
+      let isRecommendation = false;
+
+      if (/recommendation:/i.test(line)) {
+          isRecommendation = true;
+      }
+
+      if (/bullish|favorable|buy/i.test(line)) {
+          colorClass = "text-secondary";
+      } else if (/bearish|caution|sell|pressure/i.test(line)) {
+          colorClass = "text-error";
+      }
+
+      const finalClass = `${colorClass} ${isRecommendation ? 'mt-2 font-bold' : ''}`;
+      return <p key={i} className={finalClass}>{line}</p>;
     });
   }, [data?.latest_analysis]);
 
@@ -44,7 +55,7 @@ export default function GroqStrategyPanel({ data }: GroqStatePanelProps) {
               <div className="flex items-center gap-2">
                   <span className="text-[10px] uppercase tracking-widest text-outline font-bold">Confidence</span>
                   <div className={`px-3 py-1 rounded font-mono font-bold text-sm ${data.confidence_score > 0.7 ? 'bg-secondary/20 text-secondary border border-secondary/50' : data.confidence_score < 0.4 ? 'bg-error/20 text-error border border-error/50' : 'bg-surface-variant text-on-surface'}`}>
-                      {(data.confidence_score * 100).toFixed(1)}%
+                      {((data.confidence_score ?? 0) * 100).toFixed(1)}%
                   </div>
               </div>
           )}

@@ -44,7 +44,7 @@ export default function OllamaExecutionPanel({ data }: OllamaExecutionPanelProps
             <Bot className="w-5 h-5 text-tertiary-fixed-dim" />
             Ollama Execution Engine
           </h2>
-          {data?.stats.circuit_breaker_active && (
+          {data?.stats?.circuit_breaker_active && (
               <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-error bg-error/10 px-2 py-0.5 rounded border border-error/50">
                   <ShieldAlert className="w-3 h-3"/> Halted
               </span>
@@ -63,14 +63,14 @@ export default function OllamaExecutionPanel({ data }: OllamaExecutionPanelProps
                  <div className="grid grid-cols-2 gap-4">
                     <div>
                         <div className="text-[10px] text-outline uppercase tracking-wider mb-1">Max Drawdown</div>
-                        <div className={`text-lg font-mono font-bold ${data.stats.max_drawdown > 10 ? 'text-error' : 'text-on-surface'}`}>
-                            {data.stats.max_drawdown.toFixed(2)}%
+                        <div className={`text-lg font-mono font-bold ${(data.stats?.max_drawdown || 0) > 10 ? 'text-error' : 'text-on-surface'}`}>
+                            {(data.stats?.max_drawdown || 0).toFixed(2)}%
                         </div>
                     </div>
                     <div>
                         <div className="text-[10px] text-outline uppercase tracking-wider mb-1">Win Rate</div>
-                        <div className={`text-lg font-mono font-bold ${data.stats.win_rate > 50 ? 'text-secondary' : 'text-on-surface-variant'}`}>
-                            {data.stats.win_rate.toFixed(1)}%
+                        <div className={`text-lg font-mono font-bold ${(data.stats?.win_rate || 0) > 50 ? 'text-secondary' : 'text-on-surface-variant'}`}>
+                            {(data.stats?.win_rate || 0).toFixed(1)}%
                         </div>
                     </div>
                  </div>
@@ -84,13 +84,16 @@ export default function OllamaExecutionPanel({ data }: OllamaExecutionPanelProps
                         <div className="flex-1 flex flex-col text-[9px] font-mono justify-center gap-0.5">
                             {/* Asks (Sell Orders - Red) */}
                             <div className="flex flex-col-reverse gap-[1px]">
-                                {data.l2_book.asks.slice(0, 5).map((ask, i) => (
+                                {data.l2_book.asks.slice(0, 5).map((ask, i) => {
+                                    const maxAskVol = Math.max(...data.l2_book!.asks.map(a => a[1]), 1);
+                                    return (
                                     <div key={`ask-${i}`} className="flex justify-between text-error relative px-1">
-                                        <div className="absolute right-0 top-0 h-full bg-rose-900/20" style={{width: `${(ask[1]/5)*100}%`}}></div>
+                                        <div className="absolute right-0 top-0 h-full bg-rose-900/20" style={{width: `${(ask[1]/maxAskVol)*100}%`}}></div>
                                         <span className="relative z-10">{ask[0].toFixed(1)}</span>
                                         <span className="relative z-10">{ask[1].toFixed(2)}</span>
                                     </div>
-                                ))}
+                                    );
+                                })}
                             </div>
 
                             {/* Spread Marker */}
@@ -100,13 +103,16 @@ export default function OllamaExecutionPanel({ data }: OllamaExecutionPanelProps
 
                             {/* Bids (Buy Orders - Green) */}
                             <div className="flex flex-col gap-[1px]">
-                                {data.l2_book.bids.slice(0, 5).map((bid, i) => (
+                                {data.l2_book.bids.slice(0, 5).map((bid, i) => {
+                                    const maxBidVol = Math.max(...data.l2_book!.bids.map(b => b[1]), 1);
+                                    return (
                                     <div key={`bid-${i}`} className="flex justify-between text-secondary relative px-1">
-                                        <div className="absolute right-0 top-0 h-full bg-emerald-900/20" style={{width: `${(bid[1]/5)*100}%`}}></div>
+                                        <div className="absolute right-0 top-0 h-full bg-emerald-900/20" style={{width: `${(bid[1]/maxBidVol)*100}%`}}></div>
                                         <span className="relative z-10">{bid[0].toFixed(1)}</span>
                                         <span className="relative z-10">{bid[1].toFixed(2)}</span>
                                     </div>
-                                ))}
+                                    );
+                                })}
                             </div>
                         </div>
                     </div>
@@ -125,7 +131,7 @@ export default function OllamaExecutionPanel({ data }: OllamaExecutionPanelProps
                                     let currentPnl = 0;
                                     let pnlColor = "text-on-surface-variant";
                                     let pnlStr = "---";
-                                    if (data.currentPrice) {
+                                    if (data.currentPrice && trade.entry_price > 0) {
                                         const tokens = trade.amount_usd / trade.entry_price;
                                         const val = tokens * data.currentPrice;
                                         currentPnl = val - trade.amount_usd;
