@@ -45,7 +45,7 @@ latest_market_state = {"price": 65000.0, "rsi": 50.0}
 persistent_tasks = set()
 
 async def background_redis_listener():
-    r = redis.Redis(host='localhost', port=6379, db=0)
+    r = redis.Redis(host=os.getenv('REDIS_HOST', 'localhost'), port=6379, db=0)
     pubsub = r.pubsub()
     await pubsub.subscribe("crypto_prices")
     try:
@@ -106,7 +106,7 @@ async def websocket_endpoint(websocket: WebSocket):
     WEBSOCKET_CONNECTIONS.inc()
 
     # Connect to Redis
-    r = redis.Redis(host='localhost', port=6379, db=0)
+    r = redis.Redis(host=os.getenv('REDIS_HOST', 'localhost'), port=6379, db=0)
     pubsub = r.pubsub()
     await pubsub.subscribe("crypto_prices")
 

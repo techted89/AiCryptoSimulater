@@ -1,3 +1,4 @@
+import os
 import asyncio
 import json
 import random
@@ -5,15 +6,9 @@ import time
 import redis.asyncio as redis
 import ccxt.pro as ccxt
 
-# Shared state to hold latest data before publishing
-shared_state = {
-    "symbol": "BTC",
-    "price": 65000.0,
-    "order_book": {
-        "bids": [],
-        "asks": []
-    }
-}
+async def simulate_data_ingestion():
+    # Connect to the local Redis instance
+    r = redis.Redis(host=os.getenv('REDIS_HOST', 'localhost'), port=6379, db=0)
 
 async def fetch_ticker(exchange):
     global shared_state
