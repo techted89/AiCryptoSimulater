@@ -39,15 +39,22 @@ Alternatively, you can install dependencies manually:
 3.  **Frontend Dependencies**: `cd frontend && npm install`
 
 
-## Running with Docker
+## Running with Docker (Recommended)
 
-You can easily run the entire stack using Docker Compose:
+You can easily deploy the entire stack from scratch using the provided deployment script. This script will automatically check for Docker and Docker Compose, install them if necessary (on Ubuntu/Debian), and start the simulator in the background.
 
 ```bash
-docker-compose up --build
+chmod +x deploy-docker.sh
+./deploy-docker.sh
 ```
 
-This will build the frontend and backend images and start all services. The dashboard will be available at `http://localhost:3000`.
+Alternatively, if you already have Docker installed, you can run:
+```bash
+docker-compose up --build -d
+```
+
+The dashboard will be available at `http://localhost:3000`.
+To stop the services, run `docker-compose down`.
 
 ## Running the Simulator locally
 
