@@ -15,7 +15,8 @@ shared_state = {
     "order_book": {
         "bids": [],
         "asks": []
-    }
+    },
+    "live": False
 }
 
 async def fetch_ticker(exchange):
@@ -25,6 +26,10 @@ async def fetch_ticker(exchange):
             last_price = ticker.get('last')
             if last_price is not None:
                 shared_state["price"] = last_price
+
+            if shared_state["price"] is not None and shared_state["order_book"]["bids"] and shared_state["order_book"]["asks"]:
+                shared_state["live"] = True
+
         except (ccxt.NetworkError, ccxt.RequestTimeout, ccxt.ExchangeNotAvailable) as e:
             print(f"Transient error in fetch_ticker: {e}")
             await asyncio.sleep(5)
@@ -38,6 +43,10 @@ async def fetch_order_book(exchange):
             orderbook = await exchange.watch_order_book(SYMBOL, limit=5)
             shared_state["order_book"]["bids"] = orderbook.get('bids', [])
             shared_state["order_book"]["asks"] = orderbook.get('asks', [])
+
+            if shared_state["price"] is not None and shared_state["order_book"]["bids"] and shared_state["order_book"]["asks"]:
+                shared_state["live"] = True
+
         except (ccxt.NetworkError, ccxt.RequestTimeout, ccxt.ExchangeNotAvailable) as e:
             print(f"Transient error in fetch_order_book: {e}")
             await asyncio.sleep(5)
@@ -49,8 +58,8 @@ async def publish_data(r):
     print("Starting data ingestion loop...")
     try:
         while True:
-            # Freshness guard
-            if shared_state["price"] is None or not shared_state["order_book"]["bids"] or not shared_state["order_book"]["asks"]:
+            # Freshness guard using 'live' flag
+            if not shared_state["live"]:
                 await asyncio.sleep(0.1)
                 continue
 
