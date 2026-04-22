@@ -1,3 +1,4 @@
+import os
 import asyncio
 import json
 import random
@@ -6,7 +7,7 @@ import time
 
 async def simulate_data_ingestion():
     # Connect to the local Redis instance
-    r = redis.Redis(host='localhost', port=6379, db=0)
+    r = redis.Redis(host=os.getenv('REDIS_HOST', 'localhost'), port=6379, db=0)
 
     base_price = 65000.0
 
