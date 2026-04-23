@@ -22,7 +22,7 @@ class ActorAgent:
         self.circuit_breaker_active = False
 
     def check_risk(self, trade_amount: float, total_wallet_value: float) -> bool:
-        """Risk check: Is the trade size > 5% of the mock wallet?"""
+        """Checks if a trade violates risk management parameters (e.g., size > 5% of wallet)."""
         max_allowed = total_wallet_value * 0.05
         if trade_amount > max_allowed:
             return False
@@ -60,8 +60,9 @@ class ActorAgent:
                     prompt = f"Trade ID: {trade_id}\nSymbol: {trade['symbol']}\nEntry Price: {entry_price}\nCurrent Price: {current_price}\nPnL: {pnl_pct*100:.2f}%\n\nShould I CLOSE this trade or HOLD? Respond strictly with 'CLOSE' or 'HOLD'."
 
                     try:
+                        ollama_url = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
                         async with session.post(
-                            "http://localhost:11434/v1/chat/completions",
+                            f"{ollama_url}/v1/chat/completions",
                             json={"model": "llama3.2:1b", "messages": [{"role": "user", "content": prompt}]},
                             timeout=aiohttp.ClientTimeout(total=2.0)
                         ) as res:
@@ -245,6 +246,7 @@ class ActorAgent:
         return trade
 
     def update_mdd(self, current_wallet_value: float):
+        """Updates the maximum drawdown metric."""
         if current_wallet_value > self.peak_wallet:
             self.peak_wallet = current_wallet_value
         drawdown = (self.peak_wallet - current_wallet_value) / self.peak_wallet

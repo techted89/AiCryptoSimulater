@@ -48,7 +48,6 @@ export default function Home() {
   // Determine dynamic base URLs for the backend API and WS
   const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
   const baseWsUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8000';
-  const adminToken = process.env.NEXT_PUBLIC_ADMIN_TOKEN;
 
   const fetchState = async () => {
     try {
@@ -129,31 +128,24 @@ export default function Home() {
 
 
   const handleSaveKeys = async () => {
-    if (!adminToken) {
-      console.error('Failed to save keys: NEXT_PUBLIC_ADMIN_TOKEN is not set in the environment.');
-      alert('Failed: Admin token is missing. Please configure your environment.');
-      return;
-    }
     setLoading(true);
     try {
       const response = await fetch(`${baseUrl}/api/keys`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'X-Admin-Token': adminToken
+          'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ actor_key: actorKey, researcher_key: researcherKey, groq_key: groqKey }),
+        body: JSON.stringify({ researcher_key: researcherKey, groq_key: groqKey })
       });
-      if (response.ok) {
-        setKeysSaved(true);
-        setTimeout(() => setKeysSaved(false), 3000);
-      } else {
-        const errorText = await response.text();
-        console.error('Failed to save keys:', response.status, errorText);
-        throw new Error(`API Error: ${response.status}`);
+
+      if (!response.ok) {
+          throw new Error('Server error');
       }
-    } catch (err) {
-      console.error('Error saving keys:', err);
+
+      alert('Keys updated successfully (Memory only)');
+      setApiModalOpen(false);
+    } catch (e) {
+      alert('Failed to update keys');
     } finally {
       setLoading(false);
     }
@@ -289,7 +281,7 @@ return (
               <div className="bg-surface-container rounded-xl overflow-hidden p-4">
                  <button
                     onClick={() => handleControlAction('reset_wallet')}
-                    disabled={loading || !adminToken}
+                    disabled={loading}
                     className="w-full py-2 bg-surface-container-highest text-on-surface font-bold uppercase tracking-widest rounded text-xs flex items-center justify-center gap-2 hover:bg-surface-variant transition-all disabled:opacity-50"
                   >
                     <RefreshCw className="w-4 h-4" />
@@ -309,8 +301,8 @@ return (
               <div className="glass-panel rounded-xl p-5 border border-outline-variant/10">
                 <h3 className="text-xs font-bold uppercase tracking-widest text-primary mb-4">Terminal Execution</h3>
                 <div className="grid grid-cols-2 gap-2 mb-4">
-                  <button onClick={() => handleControlAction('trigger_trade')} disabled={loading || !adminToken} className="py-2 bg-secondary text-on-secondary font-bold uppercase tracking-widest rounded text-xs shadow-[0_4px_12px_rgba(5,231,119,0.2)] disabled:opacity-50 flex justify-center items-center gap-1"><Zap className="w-3 h-3"/> Long</button>
-                  <button onClick={() => handleControlAction('close_trade')} disabled={loading || !adminToken || activeTrades.length === 0} className="py-2 bg-surface-container-highest text-on-surface font-bold uppercase tracking-widest rounded text-xs disabled:opacity-50 flex justify-center items-center gap-1"><XCircle className="w-3 h-3"/> Exit</button>
+                  <button onClick={() => handleControlAction('trigger_trade')} disabled={loading} className="py-2 bg-secondary text-on-secondary font-bold uppercase tracking-widest rounded text-xs shadow-[0_4px_12px_rgba(5,231,119,0.2)] disabled:opacity-50 flex justify-center items-center gap-1"><Zap className="w-3 h-3"/> Long</button>
+                  <button onClick={() => handleControlAction('close_trade')} disabled={loading || activeTrades.length === 0} className="py-2 bg-surface-container-highest text-on-surface font-bold uppercase tracking-widest rounded text-xs disabled:opacity-50 flex justify-center items-center gap-1"><XCircle className="w-3 h-3"/> Exit</button>
                 </div>
                 <div className="space-y-3">
                   <div>
@@ -424,9 +416,9 @@ return (
       <footer className="fixed bottom-0 left-0 right-0 z-50 bg-[#0a0e14] h-8 flex justify-between items-center px-6 border-t border-[#3b494b]/15">
         <span className="font-mono text-[10px] uppercase tracking-widest text-[#05e777]">SYSTEM STATUS: OPERATIONAL // LATENCY 12MS</span>
         <div className="flex items-center gap-4 font-mono text-[10px] uppercase tracking-widest">
-          <a className="text-[#849495] hover:text-[#00F0FF] transition-colors" href="#">API status</a>
-          <a className="text-[#849495] hover:text-[#00F0FF] transition-colors" href="#">Grok v2</a>
-          <a className="text-[#849495] hover:text-[#00F0FF] transition-colors" href="#">Gemini Pro</a>
+          <span className="text-[#849495] hover:text-[#00F0FF] transition-colors cursor-default">API status</span>
+          <span className="text-[#849495] hover:text-[#00F0FF] transition-colors cursor-default">Ollama Llama3.2</span>
+          <span className="text-[#849495] hover:text-[#00F0FF] transition-colors cursor-default">Gemini Pro</span>
         </div>
       </footer>
 
@@ -445,16 +437,15 @@ return (
               </div>
               <div className="space-y-6">
                 <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-on-surface-variant uppercase monospaced">Actor Agent Key</label>
-                  <input type="password" value={actorKey} onChange={(e) => setActorKey(e.target.value)} className="w-full bg-surface-container-lowest border border-outline-variant/30 rounded-lg px-4 py-3 text-sm monospaced focus:border-primary-container outline-none transition-all text-on-surface" />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-on-surface-variant uppercase monospaced">Researcher Agent Key</label>
+                  <label className="text-[10px] font-bold text-on-surface-variant uppercase monospaced">Researcher Agent Key (Gemini)</label>
                   <input type="password" value={researcherKey} onChange={(e) => setResearcherKey(e.target.value)} className="w-full bg-surface-container-lowest border border-outline-variant/30 rounded-lg px-4 py-3 text-sm monospaced focus:border-primary-container outline-none transition-all text-on-surface" />
                 </div>
                 <div className="space-y-2">
                   <label className="text-[10px] font-bold text-on-surface-variant uppercase monospaced">Groq Fallback Key</label>
                   <input type="password" value={groqKey} onChange={(e) => setGroqKey(e.target.value)} className="w-full bg-surface-container-lowest border border-outline-variant/30 rounded-lg px-4 py-3 text-sm monospaced focus:border-primary-container outline-none transition-all text-on-surface" />
+                </div>
+                <div className="pt-2">
+                    <p className="text-xs text-outline italic">Note: The Actor Agent (Execution) runs locally via Ollama on port 11434 and does not require an API key.</p>
                 </div>
               </div>
               <div className="mt-10 flex gap-4">

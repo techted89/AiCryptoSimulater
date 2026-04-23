@@ -28,14 +28,23 @@ echo "Checking Redis..."
 if ! redis-cli ping >/dev/null 2>&1; then
     echo "Redis is not running. Attempting to start Redis..."
     sudo service redis-server start || redis-server --daemonize yes || echo "Failed to start Redis"
+    sleep 2 # Give Redis time to start
 fi
 
 echo "Setting environment variables..."
-# Set the environment variable for the local model endpoint
-export OLLAMA_BASE_URL="http://localhost:11434"
+if [ -f .env ]; then
+    export $(grep -v '^#' .env | xargs)
+else
+    echo "Warning: .env file not found. Falling back to defaults."
+fi
+
+# Activate the virtual environment before running python/uvicorn
+if [ -d "venv" ]; then
+    source venv/bin/activate
+fi
 
 echo "Starting Backend API..."
-uvicorn app.main:app --port 8000 > backend.log 2>&1 &
+uvicorn app.main:app --host 0.0.0.0 --port 8000 > backend.log 2>&1 &
 PIDS+=($!)
 
 echo "Starting Data Ingestor..."
