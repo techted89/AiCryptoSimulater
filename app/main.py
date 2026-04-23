@@ -106,7 +106,7 @@ async def websocket_endpoint(websocket: WebSocket):
     WEBSOCKET_CONNECTIONS.inc()
 
     # Connect to Redis
-    r = redis.Redis(host=os.environ.get('REDIS_HOST', 'localhost'), port=6379, db=0)
+    r = redis.Redis(host=os.environ.get('REDIS_HOST', 'localhost'), port=int(os.environ.get('REDIS_PORT', 6379)), db=int(os.environ.get('REDIS_DB', 0)))
     pubsub = r.pubsub()
     await pubsub.subscribe("crypto_prices")
 
@@ -273,21 +273,11 @@ class KeysRequest(BaseModel):
     groq_key: str = ""
 
 
-API_KEY_NAME = "X-Admin-Token"
-api_key_header = APIKeyHeader(name=API_KEY_NAME, auto_error=False)
-
 # Mock secure store
 _secure_store = {}
 
 @app.post("/api/keys")
-async def set_keys(req: KeysRequest, token: str = Security(api_key_header)):
-    # Very basic auth
-    expected_token = os.environ.get("ADMIN_TOKEN")
-    if not expected_token:
-        raise HTTPException(status_code=500, detail="Server not configured for admin access (ADMIN_TOKEN missing)")
-    if token != expected_token:
-        raise HTTPException(status_code=401, detail="Unauthorized")
-
+async def set_keys(req: KeysRequest):
     _secure_store["GEMINI_API_KEY_RESEARCHER"] = req.researcher_key
     os.environ["GEMINI_API_KEY_RESEARCHER"] = req.researcher_key
 

@@ -60,8 +60,9 @@ class ActorAgent:
                     prompt = f"Trade ID: {trade_id}\nSymbol: {trade['symbol']}\nEntry Price: {entry_price}\nCurrent Price: {current_price}\nPnL: {pnl_pct*100:.2f}%\n\nShould I CLOSE this trade or HOLD? Respond strictly with 'CLOSE' or 'HOLD'."
 
                     try:
+                        ollama_url = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
                         async with session.post(
-                            "http://localhost:11434/v1/chat/completions",
+                            f"{ollama_url}/v1/chat/completions",
                             json={"model": "llama3.2:1b", "messages": [{"role": "user", "content": prompt}]},
                             timeout=aiohttp.ClientTimeout(total=2.0)
                         ) as res:
@@ -257,7 +258,6 @@ class ActorAgent:
             self.circuit_breaker_active = True
 
     def get_stats(self, current_price: float = None) -> dict:
-        """Returns mock agent statistics including active PnL."""
         """Returns mock agent statistics including active PnL."""
         active_value = 0.0
         active_pnl = 0.0

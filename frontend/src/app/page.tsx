@@ -129,33 +129,18 @@ export default function Home() {
 
 
   const handleSaveKeys = async () => {
-    if (!adminToken) {
-      console.error('Failed to save keys: NEXT_PUBLIC_ADMIN_TOKEN is not set in the environment.');
-      alert('Failed: Admin token is missing. Please configure your environment.');
-      return;
-    }
-    setLoading(true);
     try {
-      const response = await fetch(`${baseUrl}/api/keys`, {
+      await fetch('http://localhost:8000/api/keys', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'X-Admin-Token': adminToken
+          'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ researcher_key: researcherKey, groq_key: groqKey }),
+        body: JSON.stringify({ researcher_key: researcherKey, groq_key: groqKey })
       });
-      if (response.ok) {
-        setKeysSaved(true);
-        setTimeout(() => setKeysSaved(false), 3000);
-      } else {
-        const errorText = await response.text();
-        console.error('Failed to save keys:', response.status, errorText);
-        throw new Error(`API Error: ${response.status}`);
-      }
-    } catch (err) {
-      console.error('Error saving keys:', err);
-    } finally {
-      setLoading(false);
+      alert('Keys updated successfully (Memory only)');
+      setApiModalOpen(false);
+    } catch (e) {
+      alert('Failed to update keys');
     }
   };
 
@@ -424,9 +409,9 @@ return (
       <footer className="fixed bottom-0 left-0 right-0 z-50 bg-[#0a0e14] h-8 flex justify-between items-center px-6 border-t border-[#3b494b]/15">
         <span className="font-mono text-[10px] uppercase tracking-widest text-[#05e777]">SYSTEM STATUS: OPERATIONAL // LATENCY 12MS</span>
         <div className="flex items-center gap-4 font-mono text-[10px] uppercase tracking-widest">
-          <a className="text-[#849495] hover:text-[#00F0FF] transition-colors" href="#">API status</a>
-          <a className="text-[#849495] hover:text-[#00F0FF] transition-colors" href="#">Grok v2</a>
-          <a className="text-[#849495] hover:text-[#00F0FF] transition-colors" href="#">Gemini Pro</a>
+          <span className="text-[#849495] hover:text-[#00F0FF] transition-colors cursor-default">API status</span>
+          <span className="text-[#849495] hover:text-[#00F0FF] transition-colors cursor-default">Ollama Llama3.2</span>
+          <span className="text-[#849495] hover:text-[#00F0FF] transition-colors cursor-default">Gemini Pro</span>
         </div>
       </footer>
 

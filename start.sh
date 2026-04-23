@@ -6,7 +6,7 @@ cleanup() {
     echo "Stopping all processes..."
     for PID in "${PIDS[@]}"; do
         if kill -0 "$PID" 2>/dev/null; then
-            kill -9 "$PID" || true
+            kill "$PID" || true
         fi
     done
     pkill -f "uvicorn app.main:app" || true
@@ -32,8 +32,11 @@ if ! redis-cli ping >/dev/null 2>&1; then
 fi
 
 echo "Setting environment variables..."
-# Set the environment variable for the local model endpoint
-export OLLAMA_BASE_URL="http://localhost:11434"
+if [ -f .env ]; then
+    export $(grep -v '^#' .env | xargs)
+else
+    echo "Warning: .env file not found. Falling back to defaults."
+fi
 
 # Activate the virtual environment before running python/uvicorn
 if [ -d "venv" ]; then
