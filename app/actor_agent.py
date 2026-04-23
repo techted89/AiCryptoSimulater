@@ -259,7 +259,6 @@ class ActorAgent:
 
     def get_stats(self, current_price: float = None) -> dict:
         """Returns mock agent statistics including active PnL."""
-        """Returns mock agent statistics including active PnL."""
         active_value = 0.0
         active_pnl = 0.0
 

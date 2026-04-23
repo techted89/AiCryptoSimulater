@@ -129,33 +129,18 @@ export default function Home() {
 
 
   const handleSaveKeys = async () => {
-    if (!adminToken) {
-      console.error('Failed to save keys: NEXT_PUBLIC_ADMIN_TOKEN is not set in the environment.');
-      alert('Failed: Admin token is missing. Please configure your environment.');
-      return;
-    }
-    setLoading(true);
     try {
-      const response = await fetch(`${baseUrl}/api/keys`, {
+      await fetch('http://localhost:8000/api/keys', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'X-Admin-Token': adminToken
+          'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ researcher_key: researcherKey, groq_key: groqKey }),
+        body: JSON.stringify({ researcher_key: researcherKey, groq_key: groqKey })
       });
-      if (response.ok) {
-        setKeysSaved(true);
-        setTimeout(() => setKeysSaved(false), 3000);
-      } else {
-        const errorText = await response.text();
-        console.error('Failed to save keys:', response.status, errorText);
-        throw new Error(`API Error: ${response.status}`);
-      }
-    } catch (err) {
-      console.error('Error saving keys:', err);
-    } finally {
-      setLoading(false);
+      alert('Keys updated successfully (Memory only)');
+      setApiModalOpen(false);
+    } catch (e) {
+      alert('Failed to update keys');
     }
   };
 

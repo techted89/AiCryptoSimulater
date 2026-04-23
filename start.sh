@@ -6,7 +6,7 @@ cleanup() {
     echo "Stopping all processes..."
     for PID in "${PIDS[@]}"; do
         if kill -0 "$PID" 2>/dev/null; then
-            kill -9 "$PID" || true
+            kill "$PID" || true
         fi
     done
     pkill -f "uvicorn app.main:app" || true
@@ -43,13 +43,8 @@ if [ -d "venv" ]; then
     source venv/bin/activate
 fi
 
-# Activate the virtual environment before running python/uvicorn
-if [ -d "venv" ]; then
-    source venv/bin/activate
-fi
-
 echo "Starting Backend API..."
-uvicorn app.main:app --host 127.0.0.1 --port 8000 > backend.log 2>&1 &
+uvicorn app.main:app --host 0.0.0.0 --port 8000 > backend.log 2>&1 &
 PIDS+=($!)
 
 echo "Starting Data Ingestor..."
