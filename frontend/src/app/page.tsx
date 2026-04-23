@@ -1,131 +1,69 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
-import TradingChart from '@/components/TradingChart';
-import StrategyAnalysisPanel from '@/components/StrategyAnalysisPanel';
-import AgentTerminal from '@/components/AgentTerminal';
-import { RefreshCw, Zap, Activity, XCircle, AlertTriangle } from 'lucide-react';
-
-interface AgentStats {
-  balance: number;
-  wallet_value: number;
-  floating_pnl: number;
-  open_positions: number;
-  total_closed_trades: number;
-  win_rate: number;
-  max_drawdown: number;
-  sharpe_ratio: number;
-  circuit_breaker_active: boolean;
-}
-
-interface Trade {
-  id: string;
-  symbol: string;
-  quoted_price?: number;
-  entry_price: number;
-  exit_price?: number;
-  slippage_pct?: number;
-  fee_usd?: number;
-  exit_fee_usd?: number;
-  amount_usd: number;
-  pnl?: number;
-  confidence: number;
-  status: string;
-}
+import React, { useState, useEffect } from 'react';
+import TradingChart from '../components/TradingChart';
+import GeminiStatePanel from '../components/GeminiStatePanel';
+import GroqStrategyPanel from '../components/GroqStrategyPanel';
+import OllamaExecutionPanel from '../components/OllamaExecutionPanel';
+import { RefreshCw, Zap, XCircle } from 'lucide-react';
 
 export default function Home() {
-  const [activeTab, setActiveTab] = useState('dashboard');
-  const [stats, setStats] = useState<AgentStats | null>(null);
-  const [activeTrades, setActiveTrades] = useState<Trade[]>([]);
-  const [historyTrades, setHistoryTrades] = useState<Trade[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [actorKey, setActorKey] = useState('');
-  const [researcherKey, setResearcherKey] = useState('');
-  const [groqKey, setGroqKey] = useState('');
-  const [keysSaved, setKeysSaved] = useState(false);
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'strategy'>('dashboard');
   const [apiModalOpen, setApiModalOpen] = useState(false);
+  const [researcherKey, setResearcherKey] = useState("");
+  const [groqKey, setGroqKey] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  // Determine dynamic base URLs for the backend API and WS
+  const [agentState, setAgentState] = useState<any>(null);
+
   const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-  const baseWsUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8000';
 
-  const fetchState = async () => {
-    try {
-      const statsRes = await fetch(`${baseUrl}/api/stats`);
-      const statsData = await statsRes.json();
-      setStats(statsData);
-
-      const tradesRes = await fetch(`${baseUrl}/api/trades`);
-      const tradesData = await tradesRes.json();
-      setActiveTrades(tradesData.active);
-      setHistoryTrades(tradesData.history.reverse()); // Newest closed first
-    } catch (err) {
-      console.error("Failed to fetch state:", err);
-    }
-  };
-
-  // Connect to the state WebSocket
   useEffect(() => {
-    // Perform an initial fetch to populate UI instantly
-    fetchState();
+    let ws: WebSocket;
+    let reconnectTimeout: NodeJS.Timeout;
+    let isConnecting = false;
 
-    let ws: WebSocket | null = null;
-    let reconnectTimeout: ReturnType<typeof setTimeout>;
-    let isComponentMounted = true;
-    let reconnectAttempt = 0;
-    const baseDelayMs = 1000;
-    const maxDelayMs = 10000;
-
-    const connectWebSocket = () => {
-      ws = new WebSocket(`${baseWsUrl}/ws/state`);
+    const connect = () => {
+      if (isConnecting || (ws && ws.readyState === WebSocket.OPEN)) return;
+      isConnecting = true;
+      const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8000';
+      ws = new WebSocket(`${wsUrl}/ws/state`);
 
       ws.onopen = () => {
-        reconnectAttempt = 0; // Reset on successful connect
+        isConnecting = false;
+        console.log('Connected to agent state stream');
       };
 
       ws.onmessage = (event) => {
         try {
-          const payload = JSON.parse(event.data);
-          if (payload.stats) {
-            setStats(payload.stats);
-          }
-          if (payload.trades) {
-            setActiveTrades(payload.trades.active);
-            setHistoryTrades(payload.trades.history.reverse());
-          }
+          const parsed = JSON.parse(event.data);
+          setAgentState(parsed);
         } catch (err) {
-          console.error("Failed to parse state WS message:", err);
+          console.error("Parse state error:", err);
         }
-      };
-
-      ws.onerror = (error) => {
-        console.error("State WebSocket error:", error);
       };
 
       ws.onclose = () => {
-        if (isComponentMounted) {
-          const delay = Math.min(maxDelayMs, baseDelayMs * Math.pow(2, reconnectAttempt));
-          const jitter = Math.random() * baseDelayMs; // Add jitter
-          const totalDelay = delay + jitter;
-          console.log(`State WebSocket closed, attempting to reconnect in ${totalDelay.toFixed(0)}ms...`);
-          reconnectTimeout = setTimeout(connectWebSocket, totalDelay);
-          reconnectAttempt++;
-        }
+        isConnecting = false;
+        reconnectTimeout = setTimeout(connect, 2000);
+      };
+
+      ws.onerror = () => {
+        isConnecting = false;
+        if (ws) ws.close();
       };
     };
 
-    connectWebSocket();
+    connect();
 
     return () => {
-      isComponentMounted = false;
       clearTimeout(reconnectTimeout);
       if (ws) {
+        ws.onclose = null;
         ws.close();
       }
     };
   }, []);
-
-
 
   const handleSaveKeys = async () => {
     setLoading(true);
@@ -151,262 +89,133 @@ export default function Home() {
     }
   };
 
-  const handleControlAction = async (action: string) => {
-    setLoading(true);
+  const handleResetWallet = async () => {
     try {
       await fetch(`${baseUrl}/api/control`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action }),
+        body: JSON.stringify({ action: 'reset_wallet' })
       });
-      await fetchState(); // Refresh immediately
-    } catch (err) {
-      console.error(`Failed to execute ${action}:`, err);
-    } finally {
-      setLoading(false);
+    } catch (e) {
+      console.error(e);
     }
   };
 
-return (
-    <div className="bg-background text-on-background min-h-screen selection:bg-primary-container selection:text-on-primary-container flex flex-col">
-      {/* TopNavBar */}
-      <nav className="flex justify-between items-center w-full px-6 py-3 h-16 bg-gradient-to-r from-[#1c2026] to-[#0a0e14] z-50 fixed top-0 border-b border-outline-variant/10">
-        <div className="flex items-center gap-8">
-          <span className="text-xl font-bold tracking-tighter text-[#dbfcff] uppercase font-headline">KINETIC VAULT</span>
-          <div className="hidden md:flex gap-6 items-center font-label text-sm uppercase tracking-wider">
-            <button
-              onClick={() => setActiveTab('dashboard')}
-              className={`transition-colors ${activeTab === 'dashboard' ? 'text-[#00F0FF] border-b-2 border-[#00F0FF] pb-1' : 'text-[#849495] hover:text-[#dbfcff]'}`}>
-              Dashboard
-            </button>
-            <button className="text-[#849495] hover:text-[#dbfcff] transition-colors cursor-not-allowed opacity-50">History</button>
-            <button
-              onClick={() => setActiveTab('strategy')}
-              className={`transition-colors ${activeTab === 'strategy' ? 'text-[#00F0FF] border-b-2 border-[#00F0FF] pb-1' : 'text-[#849495] hover:text-[#dbfcff]'}`}>
-              Strategy
-            </button>
-            <button className="text-[#849495] hover:text-[#dbfcff] transition-colors cursor-not-allowed opacity-50">Research</button>
+  const handleTriggerTrade = async () => {
+      try {
+          await fetch(`${baseUrl}/api/control`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ action: 'trigger_trade' })
+          });
+      } catch (e) {
+          console.error(e);
+      }
+  };
+
+  const handleCloseTrade = async () => {
+      try {
+          await fetch(`${baseUrl}/api/control`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ action: 'close_trade' })
+          });
+      } catch (e) {
+          console.error(e);
+      }
+  };
+
+
+  return (
+    <div className="min-h-screen bg-background text-on-surface font-sans selection:bg-secondary/30 selection:text-secondary-fixed pt-16 pb-12 flex flex-col">
+      {/* Top Navigation Bar */}
+      <nav className="fixed top-0 left-0 right-0 z-50 bg-[#0a0e14]/90 backdrop-blur-md border-b border-[#3b494b]/30 h-16 flex items-center px-6 shadow-xl">
+        <div className="flex items-center gap-3 mr-12">
+          <div className="w-8 h-8 bg-gradient-to-br from-[#00F0FF] to-[#05e777] rounded-lg flex items-center justify-center shadow-[0_0_15px_rgba(0,240,255,0.4)]">
+             <span className="material-symbols-outlined text-[#0a0e14] text-xl" style={{ fontVariationSettings: "'FILL' 1" }}>monitoring</span>
           </div>
+          <span className="font-headline font-bold text-xl tracking-wide text-transparent bg-clip-text bg-gradient-to-r from-primary to-secondary">AiCryptoSim</span>
         </div>
-        <div className="flex items-center gap-4">
-          <button className="material-symbols-outlined text-outline hover:bg-[#1c2026] p-2 rounded-lg transition-all duration-300 scale-95 active:scale-90">settings</button>
-          <button className="material-symbols-outlined text-outline hover:bg-[#1c2026] p-2 rounded-lg transition-all duration-300 scale-95 active:scale-90">account_circle</button>
+
+        <div className="flex gap-2 bg-[#121a21] p-1 rounded-lg border border-[#3b494b]/50">
+          <button
+            onClick={() => setActiveTab('dashboard')}
+            className={`px-4 py-1.5 rounded-md text-sm font-bold tracking-wider uppercase transition-all ${activeTab === 'dashboard' ? 'bg-[#00F0FF]/10 text-[#00F0FF] shadow-[0_0_10px_rgba(0,240,255,0.2)]' : 'text-[#849495] hover:text-[#e2e8f0]'}`}
+          >
+            Live Monitor
+          </button>
+          <button
+            onClick={() => setActiveTab('strategy')}
+            className={`px-4 py-1.5 rounded-md text-sm font-bold tracking-wider uppercase transition-all ${activeTab === 'strategy' ? 'bg-[#05e777]/10 text-[#05e777] shadow-[0_0_10px_rgba(5,231,119,0.2)]' : 'text-[#849495] hover:text-[#e2e8f0]'}`}
+          >
+            System Settings
+          </button>
+        </div>
+
+        <div className="ml-auto flex items-center gap-4">
+           {/* Global Wallet Display */}
+           <div className="bg-[#121a21] border border-[#3b494b]/50 px-4 py-1.5 rounded-lg flex items-center gap-3 hidden md:flex">
+             <span className="material-symbols-outlined text-[#05e777] text-lg">account_balance_wallet</span>
+             <span className="font-mono font-bold text-[#e2e8f0]">
+                ${agentState?.ollama?.stats?.wallet_value?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '---'}
+             </span>
+             <span className={`text-xs font-mono font-bold ${agentState?.ollama?.stats?.floating_pnl >= 0 ? 'text-[#05e777]' : 'text-[#ffb4ab]'}`}>
+                {agentState?.ollama?.stats?.floating_pnl >= 0 ? '+' : ''}{agentState?.ollama?.stats?.floating_pnl?.toFixed(2) || '0.00'}
+             </span>
+           </div>
+
+           <button className="w-10 h-10 rounded-full bg-[#121a21] border border-[#3b494b]/50 flex items-center justify-center text-[#00F0FF] hover:bg-[#00F0FF]/10 transition-colors shadow-[0_0_10px_rgba(0,240,255,0.1)]">
+             <span className="material-symbols-outlined">notifications</span>
+           </button>
+           <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-[#3b494b] to-[#849495] border-2 border-[#121a21] cursor-pointer"></div>
         </div>
       </nav>
 
-      {/* Main Content */}
-      <main className="pt-20 pb-12 px-4 md:px-6 flex-grow">
+      {/* Main Content Area */}
+      <main className="p-6 flex-1 flex flex-col">
         {activeTab === 'dashboard' && (
-          <div className="grid grid-cols-12 gap-4">
-            {stats?.circuit_breaker_active && (
-              <div className="col-span-12 bg-error-container/20 border border-error rounded-xl p-4 flex items-center gap-4 animate-pulse">
-                <AlertTriangle className="text-error w-6 h-6" />
-                <div>
-                  <h3 className="text-error font-bold font-headline uppercase">CIRCUIT BREAKER TRIGGERED</h3>
-                  <p className="text-on-error-container text-sm">Max drawdown exceeded 15%. All automated entries halted to protect capital.</p>
-                </div>
-              </div>
-            )}
+          <div className="max-w-[1600px] mx-auto w-full space-y-6 flex-1 flex flex-col">
+             {/* Top Row: Price Stream & Gemini State */}
+             <div className="grid grid-cols-12 gap-6 h-[400px]">
+                 <div className="col-span-12 lg:col-span-8 h-full">
+                     <TradingChart />
+                 </div>
+                 <div className="col-span-12 lg:col-span-4 h-full">
+                     <GeminiStatePanel data={agentState?.gemini} />
+                 </div>
+             </div>
 
-            {/* Left Column: Agent Stats & Status */}
-            <div className="col-span-12 lg:col-span-3 flex flex-col gap-4">
-              {/* God Mode Active Control */}
-              <div className="bg-surface-container rounded-xl p-5 border-l-4 border-primary shadow-lg shadow-primary-container/5">
-                <div className="flex justify-between items-start mb-4">
-                  <div>
-                    <h2 className="text-xs font-bold uppercase tracking-widest text-primary mb-1">System Status</h2>
-                    <p className="text-xl font-headline font-bold text-on-surface">GOD MODE ACTIVE</p>
-                  </div>
-                  <span className="material-symbols-outlined text-primary text-3xl" style={{ fontVariationSettings: "'FILL' 1" }}>bolt</span>
-                </div>
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center text-xs">
-                    <span className="text-outline">AUTO-HEDGE</span>
-                    <span className="text-secondary font-bold">ENGAGED</span>
-                  </div>
-                  <div className="w-full bg-surface-container-highest h-1 rounded-full overflow-hidden">
-                    <div className="bg-primary-container h-full shadow-[0_0_8px_rgba(0,240,255,0.6)]" style={{width: '80%'}}></div>
-                  </div>
-                  <div className="flex justify-between items-center text-xs">
-                    <span className="text-outline">BALANCE</span>
-                    <span className="text-on-surface font-mono">${stats?.balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0.00'}</span>
-                  </div>
-                  <div className="flex justify-between items-center text-xs">
-                    <span className="text-outline">WALLET VALUE</span>
-                    <span className="text-on-surface font-mono">${stats?.wallet_value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0.00'}</span>
-                  </div>
-                </div>
-              </div>
+             {/* Bottom Row: Groq Strategy & Ollama Execution */}
+             <div className="grid grid-cols-12 gap-6 h-[450px]">
+                  <GroqStrategyPanel data={agentState?.groq} />
+                  <OllamaExecutionPanel
+                      data={{
+                          stats: agentState?.ollama?.stats,
+                          trades: agentState?.ollama?.trades,
+                      }}
+                  />
+             </div>
 
-              {/* Agent Performance Bento */}
-              <div className="bg-surface-container-low rounded-xl p-4 flex flex-col gap-4">
-                <h3 className="text-xs font-bold uppercase tracking-widest text-outline">Agent Neural Metrics</h3>
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between p-3 bg-surface-container rounded-lg border border-outline-variant/10">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded bg-secondary/10 flex items-center justify-center text-secondary">
-                        <span className="material-symbols-outlined text-sm">psychology</span>
-                      </div>
-                      <div>
-                        <p className="text-xs font-bold text-on-surface">Alpha-Neural V2</p>
-                        <p className="text-[10px] text-outline">Trades Closed: {stats?.total_closed_trades || 0}</p>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <p className={`text-xs font-mono font-bold ${stats && stats.floating_pnl >= 0 ? 'text-secondary' : 'text-error'}`}>
-                        {stats && stats.floating_pnl >= 0 ? '+' : ''}${stats?.floating_pnl.toFixed(2) || '0.00'} PnL
-                      </p>
-                      <p className="text-[10px] text-outline uppercase">Win Rate: {stats?.win_rate.toFixed(1) || '0'}%</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between p-3 bg-surface-container rounded-lg border border-outline-variant/10">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded bg-tertiary-container/10 flex items-center justify-center text-tertiary-fixed-dim">
-                        <span className="material-symbols-outlined text-sm">monitoring</span>
-                      </div>
-                      <div>
-                        <p className="text-xs font-bold text-on-surface">Risk Metrics</p>
-                        <p className="text-[10px] text-outline">Sharpe: {stats?.sharpe_ratio.toFixed(2) || '0.00'}</p>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-xs font-mono font-bold text-error">Max DD: {stats?.max_drawdown.toFixed(2) || '0'}%</p>
-                      <p className="text-[10px] text-outline uppercase">Stability: 99.9%</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Reset Wallet / Force Admin */}
-              <div className="bg-surface-container rounded-xl overflow-hidden p-4">
-                 <button
-                    onClick={() => handleControlAction('reset_wallet')}
-                    disabled={loading}
-                    className="w-full py-2 bg-surface-container-highest text-on-surface font-bold uppercase tracking-widest rounded text-xs flex items-center justify-center gap-2 hover:bg-surface-variant transition-all disabled:opacity-50"
-                  >
-                    <RefreshCw className="w-4 h-4" />
-                    Reset Wallet
-                  </button>
-              </div>
-            </div>
-
-            {/* Middle Column: Main Chart (TradingChart inside) */}
-            <div className="col-span-12 lg:col-span-6 flex flex-col gap-4">
-               <TradingChart activeTrades={activeTrades} historyTrades={historyTrades} />
-            </div>
-
-            {/* Right Column: L2 Order Book & Execution */}
-            <div className="col-span-12 lg:col-span-3 flex flex-col gap-4">
-              {/* Order Entry Module */}
-              <div className="glass-panel rounded-xl p-5 border border-outline-variant/10">
-                <h3 className="text-xs font-bold uppercase tracking-widest text-primary mb-4">Terminal Execution</h3>
-                <div className="grid grid-cols-2 gap-2 mb-4">
-                  <button onClick={() => handleControlAction('trigger_trade')} disabled={loading} className="py-2 bg-secondary text-on-secondary font-bold uppercase tracking-widest rounded text-xs shadow-[0_4px_12px_rgba(5,231,119,0.2)] disabled:opacity-50 flex justify-center items-center gap-1"><Zap className="w-3 h-3"/> Long</button>
-                  <button onClick={() => handleControlAction('close_trade')} disabled={loading || activeTrades.length === 0} className="py-2 bg-surface-container-highest text-on-surface font-bold uppercase tracking-widest rounded text-xs disabled:opacity-50 flex justify-center items-center gap-1"><XCircle className="w-3 h-3"/> Exit</button>
-                </div>
-                <div className="space-y-3">
-                  <div>
-                    <label className="text-[10px] text-outline uppercase font-bold tracking-widest mb-1 block">Quick Execution Mode</label>
-                    <input readOnly className="w-full bg-surface-container-highest/50 border-0 border-b border-outline/20 focus:border-primary-fixed-dim focus:ring-0 text-sm font-mono p-2 rounded cursor-not-allowed text-outline" type="text" value="Market Order Active" />
-                  </div>
-                </div>
-              </div>
-
-              {/* We will let TradingChart render the L2 depth in a simplified way, or extract it here later if needed. For now TradingChart manages L2 inside it. To match the UI, let's keep it clean or just wrap AgentTerminal here */}
-              <div className="flex-1 bg-surface-container-low rounded-xl border border-outline-variant/10 overflow-hidden min-h-[300px]">
-                 <AgentTerminal />
-              </div>
-
-            </div>
+             {/* Dev Controls */}
+             <div className="flex gap-4 p-4 bg-surface-container-low rounded-xl border border-outline-variant/10 mt-auto justify-center">
+                 <button onClick={handleTriggerTrade} className="px-4 py-2 bg-primary/20 text-primary border border-primary/50 rounded font-bold uppercase text-xs hover:bg-primary/30 transition-colors flex items-center gap-2"><Zap className="w-3 h-3"/> Force RAG Trade</button>
+                 <button onClick={handleCloseTrade} className="px-4 py-2 bg-error/20 text-error border border-error/50 rounded font-bold uppercase text-xs hover:bg-error/30 transition-colors flex items-center gap-2"><XCircle className="w-3 h-3"/> Force Close Oldest</button>
+                 <button onClick={handleResetWallet} className="px-4 py-2 bg-outline-variant/20 text-outline border border-outline-variant/50 rounded font-bold uppercase text-xs hover:bg-outline-variant/30 transition-colors flex items-center gap-2"><RefreshCw className="w-3 h-3"/> Reset Simulation</button>
+             </div>
           </div>
         )}
 
         {activeTab === 'strategy' && (
-           <div className="max-w-7xl mx-auto grid grid-cols-12 gap-6 pt-4">
-             {/* Header Section */}
-             <header className="col-span-12 mb-4">
-               <div className="flex items-end gap-3">
-                 <h1 className="font-headline text-4xl font-bold tracking-tight text-primary">STRATEGY ARCHITECT</h1>
-                 <div className="h-[2px] flex-grow bg-outline-variant opacity-20 mb-3"></div>
-                 <div className="px-3 py-1 bg-surface-container-highest text-secondary font-mono text-[10px] tracking-widest uppercase border-l-2 border-secondary-container">V4.2.0-STABLE</div>
-               </div>
-             </header>
-
-             {/* Sidebar: Asset Selection & Controls */}
-             <aside className="col-span-12 lg:col-span-4 space-y-6">
-               <section className="bg-surface-container rounded-xl p-6 relative overflow-hidden border-b-4 border-primary/20">
-                 <div className="flex items-center justify-between mb-6">
-                   <h2 className="font-headline text-lg font-medium text-on-surface">ASSET SELECTION</h2>
-                   <span className="material-symbols-outlined text-primary-fixed-dim">token</span>
-                 </div>
-                 <div className="space-y-3">
-                   <div className="bg-surface-container-high p-4 flex items-center justify-between hover:bg-surface-container-highest transition-colors cursor-pointer group">
-                     <div className="flex items-center gap-4">
-                       <div className="w-10 h-10 bg-surface-container-highest rounded-full flex items-center justify-center">
-                         <span className="material-symbols-outlined text-secondary" style={{ fontVariationSettings: "'FILL' 1" }}>currency_bitcoin</span>
-                       </div>
-                       <div>
-                         <div className="font-headline font-bold text-on-surface">BTC / USDT</div>
-                         <div className="text-xs text-outline monospaced">Active</div>
-                       </div>
-                     </div>
-                     <div className="text-right">
-                        <div className="monospaced text-secondary text-sm">${stats?.wallet_value.toLocaleString(undefined, { minimumFractionDigits: 2 }) || '---'}</div>
-                     </div>
-                   </div>
-                 </div>
-               </section>
-
-               <section className="bg-surface-container-lowest p-6 rounded-xl border border-outline-variant/10">
-                 <div className="flex items-center gap-3 mb-4">
-                   <div className="w-2 h-2 bg-secondary rounded-full animate-pulse shadow-[0_0_8px_rgba(5,231,119,0.6)]"></div>
-                   <span className="text-xs text-on-surface-variant font-mono tracking-widest">REAL-TIME EXECUTION ENGINE</span>
-                 </div>
-                 <AgentTerminal />
-               </section>
-             </aside>
-
-             {/* Main Configuration Area */}
+           <div className="max-w-7xl mx-auto grid grid-cols-12 gap-6 pt-4 w-full">
              <div className="col-span-12 lg:col-span-8 space-y-6">
-               <StrategyAnalysisPanel />
-
-               {/* API Configuration Section */}
-               <div className="bg-surface-container rounded-xl overflow-hidden">
-                 <div className="bg-surface-container-high px-6 py-4 flex justify-between items-center">
-                   <div className="flex items-center gap-2">
-                     <span className="material-symbols-outlined text-tertiary-fixed-dim">api</span>
-                     <h2 className="font-headline font-bold tracking-wide">LLM ENGINE CONNECTORS</h2>
-                   </div>
-                   <div className="flex items-center gap-4">
-                     <div className="text-[10px] font-mono text-outline uppercase">Active: Gemini Pro</div>
-                   </div>
+                 <div className="bg-surface-container rounded-xl overflow-hidden shadow-xl border border-outline-variant/20">
+                     <div className="bg-surface-container-high px-6 py-4 flex justify-between items-center border-b border-outline-variant/10">
+                         <h2 className="font-headline font-bold tracking-wide flex items-center gap-2"><span className="material-symbols-outlined text-secondary">smart_toy</span>LLM ENGINE CONNECTORS</h2>
+                     </div>
+                     <div className="p-8">
+                         <button onClick={() => setApiModalOpen(true)} className="px-6 py-2 bg-secondary text-on-secondary text-[10px] font-extrabold uppercase hover:shadow-[0_0_15px_rgba(5,231,119,0.3)] transition-all rounded">Edit Keys</button>
+                     </div>
                  </div>
-
-                 <div className="p-8 space-y-6">
-                   <div className="flex flex-col md:flex-row gap-6 items-start md:items-center bg-surface-container-high p-6 rounded-xl border-l-4 border-secondary shadow-lg relative overflow-hidden">
-                     <div className="absolute top-0 right-0 w-32 h-32 bg-secondary/5 blur-3xl rounded-full translate-x-16 -translate-y-16"></div>
-                     <div className="w-16 h-16 bg-surface-container-highest flex items-center justify-center rounded-xl border border-secondary/30">
-                        <span className="material-symbols-outlined text-3xl text-secondary">smart_toy</span>
-                     </div>
-                     <div className="flex-grow">
-                       <div className="flex items-center gap-2 mb-1">
-                         <h4 className="font-headline font-bold text-primary">Gemini 1.5 Pro</h4>
-                         <span className="text-[10px] bg-secondary-container/20 px-2 py-0.5 rounded text-secondary uppercase monospaced">Active</span>
-                       </div>
-                       <p className="text-xs text-on-surface-variant">Technical analysis and order orchestration agent.</p>
-                     </div>
-                     <div className="w-full md:w-auto flex gap-3">
-                       <button onClick={() => setApiModalOpen(true)} className="flex-grow md:flex-none px-6 py-2 bg-secondary text-on-secondary text-[10px] font-extrabold uppercase hover:shadow-[0_0_15px_rgba(5,231,119,0.3)] transition-all rounded">Edit Keys</button>
-                     </div>
-                   </div>
-                 </div>
-               </div>
-
-               <div className="flex flex-col sm:flex-row gap-4 pt-4">
-                 <button onClick={handleSaveKeys} className="flex-grow h-14 bg-gradient-to-r from-primary to-primary-container text-on-primary font-headline font-bold text-lg uppercase tracking-widest rounded-xl hover:brightness-110 transition-all active:scale-95 shadow-[0_8px_30px_rgb(0,240,255,0.15)]">
-                   INITIALIZE STRATEGY
-                 </button>
-               </div>
              </div>
            </div>
         )}
@@ -417,16 +226,16 @@ return (
         <span className="font-mono text-[10px] uppercase tracking-widest text-[#05e777]">SYSTEM STATUS: OPERATIONAL // LATENCY 12MS</span>
         <div className="flex items-center gap-4 font-mono text-[10px] uppercase tracking-widest">
           <span className="text-[#849495] hover:text-[#00F0FF] transition-colors cursor-default">API status</span>
-          <span className="text-[#849495] hover:text-[#00F0FF] transition-colors cursor-default">Ollama Llama3.2</span>
+          <span className="text-[#849495] hover:text-[#00F0FF] transition-colors cursor-default">Ollama Local</span>
           <span className="text-[#849495] hover:text-[#00F0FF] transition-colors cursor-default">Gemini Pro</span>
         </div>
       </footer>
 
-      {/* Settings Modal (Overlay simulation) */}
+      {/* Settings Modal */}
       {apiModalOpen && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-6" id="api-modal">
           <div className="absolute inset-0 bg-background/80 backdrop-blur-md" onClick={() => setApiModalOpen(false)}></div>
-          <div className="relative glass-panel w-full max-w-lg rounded-2xl border border-outline-variant/30 shadow-2xl overflow-hidden">
+          <div className="relative glass-panel w-full max-w-lg rounded-2xl border border-outline-variant/30 shadow-2xl overflow-hidden bg-surface-container">
             <div className="p-8">
               <div className="flex justify-between items-center mb-8">
                 <div>
@@ -445,11 +254,11 @@ return (
                   <input type="password" value={groqKey} onChange={(e) => setGroqKey(e.target.value)} className="w-full bg-surface-container-lowest border border-outline-variant/30 rounded-lg px-4 py-3 text-sm monospaced focus:border-primary-container outline-none transition-all text-on-surface" />
                 </div>
                 <div className="pt-2">
-                    <p className="text-xs text-outline italic">Note: The Actor Agent (Execution) runs locally via Ollama on port 11434 and does not require an API key.</p>
+                    <p className="text-xs text-outline italic">Note: The Actor Agent (Execution) runs via Ollama endpoint configured in .env and does not require an API key.</p>
                 </div>
               </div>
               <div className="mt-10 flex gap-4">
-                <button onClick={() => { handleSaveKeys(); setApiModalOpen(false); }} className="flex-grow py-4 bg-primary text-on-primary text-xs font-black uppercase tracking-[0.2em] rounded-lg hover:brightness-110 transition-colors">UPDATE VAULT</button>
+                <button disabled={loading} onClick={() => { handleSaveKeys(); }} className="flex-grow py-4 bg-primary text-on-primary text-xs font-black uppercase tracking-[0.2em] rounded-lg hover:brightness-110 transition-colors disabled:opacity-50">UPDATE VAULT</button>
               </div>
             </div>
           </div>
