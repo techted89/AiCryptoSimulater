@@ -61,9 +61,10 @@ class ActorAgent:
 
                     try:
                         ollama_url = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
+                        ollama_model = os.environ.get("OLLAMA_MODEL", "deepseek-r1:8b")
                         async with session.post(
                             f"{ollama_url}/v1/chat/completions",
-                            json={"model": "llama3.2:1b", "messages": [{"role": "user", "content": prompt}]},
+                            json={"model": ollama_model, "messages": [{"role": "user", "content": prompt}]},
                             timeout=aiohttp.ClientTimeout(total=2.0)
                         ) as res:
                             if res.status == 200:
@@ -112,6 +113,9 @@ class ActorAgent:
 
         if total_wallet_value is None:
             total_wallet_value = self.balance
+
+        if confidence_score < 0.4:
+            return {"status": "skipped", "reason": f"Confidence too low: {confidence_score:.2f}"}
 
         # Cap at 5% of wallet value to pass risk checks
         trade_fraction = min(0.05, confidence_score * 0.05)

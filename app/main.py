@@ -86,7 +86,11 @@ async def background_redis_listener():
                         l2_book,
                         macd
                     )
-                    await actor_agent.execute_trade("BTC", latest_market_state["price"], conf, l2_book)
+                    trade_res = await actor_agent.execute_trade("BTC", latest_market_state["price"], conf, l2_book)
+                    if trade_res.get("status") == "skipped":
+                        print(f"Trade skipped: {trade_res.get('reason')}")
+                    elif trade_res.get("status") == "open":
+                        print(f"Trade opened: {trade_res}")
 
     except Exception as e:
         import traceback
