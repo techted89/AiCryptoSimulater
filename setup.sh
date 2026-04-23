@@ -34,7 +34,7 @@ echo "4. Installing Frontend Node Dependencies..."
 cd frontend
 # Clean install to avoid missing .bin symlinks
 rm -rf node_modules package-lock.json
-npm install --legacy-peer-deps
+npm install
 
 echo "========================================="
 echo " Setup Complete!                         "
