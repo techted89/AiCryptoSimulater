@@ -142,7 +142,7 @@ export default function Home() {
           'Content-Type': 'application/json',
           'X-Admin-Token': adminToken
         },
-        body: JSON.stringify({ actor_key: actorKey, researcher_key: researcherKey, groq_key: groqKey }),
+        body: JSON.stringify({ researcher_key: researcherKey, groq_key: groqKey }),
       });
       if (response.ok) {
         setKeysSaved(true);
@@ -445,16 +445,15 @@ return (
               </div>
               <div className="space-y-6">
                 <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-on-surface-variant uppercase monospaced">Actor Agent Key</label>
-                  <input type="password" value={actorKey} onChange={(e) => setActorKey(e.target.value)} className="w-full bg-surface-container-lowest border border-outline-variant/30 rounded-lg px-4 py-3 text-sm monospaced focus:border-primary-container outline-none transition-all text-on-surface" />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-on-surface-variant uppercase monospaced">Researcher Agent Key</label>
+                  <label className="text-[10px] font-bold text-on-surface-variant uppercase monospaced">Researcher Agent Key (Gemini)</label>
                   <input type="password" value={researcherKey} onChange={(e) => setResearcherKey(e.target.value)} className="w-full bg-surface-container-lowest border border-outline-variant/30 rounded-lg px-4 py-3 text-sm monospaced focus:border-primary-container outline-none transition-all text-on-surface" />
                 </div>
                 <div className="space-y-2">
                   <label className="text-[10px] font-bold text-on-surface-variant uppercase monospaced">Groq Fallback Key</label>
                   <input type="password" value={groqKey} onChange={(e) => setGroqKey(e.target.value)} className="w-full bg-surface-container-lowest border border-outline-variant/30 rounded-lg px-4 py-3 text-sm monospaced focus:border-primary-container outline-none transition-all text-on-surface" />
+                </div>
+                <div className="pt-2">
+                    <p className="text-xs text-outline italic">Note: The Actor Agent (Execution) runs locally via Ollama on port 11434 and does not require an API key.</p>
                 </div>
               </div>
               <div className="mt-10 flex gap-4">
