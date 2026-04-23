@@ -6,7 +6,7 @@ cleanup() {
     echo "Stopping all processes..."
     for PID in "${PIDS[@]}"; do
         if kill -0 "$PID" 2>/dev/null; then
-            kill "$PID" || true
+            kill -9 "$PID" || true
         fi
     done
     pkill -f "uvicorn app.main:app" || true
@@ -36,6 +36,11 @@ if [ -f .env ]; then
     export $(grep -v '^#' .env | xargs)
 else
     echo "Warning: .env file not found. Falling back to defaults."
+fi
+
+# Activate the virtual environment before running python/uvicorn
+if [ -d "venv" ]; then
+    source venv/bin/activate
 fi
 
 # Activate the virtual environment before running python/uvicorn
