@@ -22,8 +22,7 @@ class ActorAgent:
         self.circuit_breaker_active = False
 
     def check_risk(self, trade_amount: float, total_wallet_value: float) -> bool:
-        """Checks if a trade violates risk management parameters."""
-        """Risk check: Is the trade size > 5% of the mock wallet?"""
+        """Checks if a trade violates risk management parameters (e.g., size > 5% of wallet)."""
         max_allowed = total_wallet_value * 0.05
         if trade_amount > max_allowed:
             return False
