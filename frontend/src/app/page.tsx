@@ -424,9 +424,9 @@ return (
       <footer className="fixed bottom-0 left-0 right-0 z-50 bg-[#0a0e14] h-8 flex justify-between items-center px-6 border-t border-[#3b494b]/15">
         <span className="font-mono text-[10px] uppercase tracking-widest text-[#05e777]">SYSTEM STATUS: OPERATIONAL // LATENCY 12MS</span>
         <div className="flex items-center gap-4 font-mono text-[10px] uppercase tracking-widest">
-          <a className="text-[#849495] hover:text-[#00F0FF] transition-colors" href="#">API status</a>
-          <a className="text-[#849495] hover:text-[#00F0FF] transition-colors" href="#">Grok v2</a>
-          <a className="text-[#849495] hover:text-[#00F0FF] transition-colors" href="#">Gemini Pro</a>
+          <span className="text-[#849495] hover:text-[#00F0FF] transition-colors cursor-default">API status</span>
+          <span className="text-[#849495] hover:text-[#00F0FF] transition-colors cursor-default">Ollama Llama3.2</span>
+          <span className="text-[#849495] hover:text-[#00F0FF] transition-colors cursor-default">Gemini Pro</span>
         </div>
       </footer>
 
