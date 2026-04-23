@@ -282,7 +282,7 @@ _secure_store = {}
 @app.post("/api/keys")
 async def set_keys(req: KeysRequest, token: str = Security(api_key_header)):
     # Very basic auth
-    expected_token = os.environ.get("ADMIN_TOKEN", "supersecretadmin123") # Added default for dev ease
+    expected_token = os.environ.get("ADMIN_TOKEN")
     if not expected_token:
         raise HTTPException(status_code=500, detail="Server not configured for admin access (ADMIN_TOKEN missing)")
     if token != expected_token:
