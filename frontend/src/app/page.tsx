@@ -66,18 +66,26 @@ export default function Home() {
   }, []);
 
   const handleSaveKeys = async () => {
+    setLoading(true);
     try {
-      await fetch('http://localhost:8000/api/keys', {
+      const response = await fetch(`${baseUrl}/api/keys`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({ researcher_key: researcherKey, groq_key: groqKey })
       });
+
+      if (!response.ok) {
+          throw new Error('Server error');
+      }
+
       alert('Keys updated successfully (Memory only)');
       setApiModalOpen(false);
     } catch (e) {
       alert('Failed to update keys');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -184,6 +192,7 @@ export default function Home() {
                       data={{
                           stats: agentState?.ollama?.stats,
                           trades: agentState?.ollama?.trades,
+                          currentPrice: agentState?.price,
                       }}
                   />
              </div>
@@ -218,7 +227,7 @@ export default function Home() {
         <span className="font-mono text-[10px] uppercase tracking-widest text-[#05e777]">SYSTEM STATUS: OPERATIONAL // LATENCY 12MS</span>
         <div className="flex items-center gap-4 font-mono text-[10px] uppercase tracking-widest">
           <span className="text-[#849495] hover:text-[#00F0FF] transition-colors cursor-default">API status</span>
-          <span className="text-[#849495] hover:text-[#00F0FF] transition-colors cursor-default">Ollama Llama3.2</span>
+          <span className="text-[#849495] hover:text-[#00F0FF] transition-colors cursor-default">Ollama Local</span>
           <span className="text-[#849495] hover:text-[#00F0FF] transition-colors cursor-default">Gemini Pro</span>
         </div>
       </footer>
@@ -246,7 +255,7 @@ export default function Home() {
                   <input type="password" value={groqKey} onChange={(e) => setGroqKey(e.target.value)} className="w-full bg-surface-container-lowest border border-outline-variant/30 rounded-lg px-4 py-3 text-sm monospaced focus:border-primary-container outline-none transition-all text-on-surface" />
                 </div>
                 <div className="pt-2">
-                    <p className="text-xs text-outline italic">Note: The Actor Agent (Execution) runs locally via Ollama on port 11434 and does not require an API key.</p>
+                    <p className="text-xs text-outline italic">Note: The Actor Agent (Execution) runs via Ollama endpoint configured in .env and does not require an API key.</p>
                 </div>
               </div>
               <div className="mt-10 flex gap-4">

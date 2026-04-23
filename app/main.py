@@ -45,7 +45,7 @@ latest_market_state = {"price": 65000.0, "rsi": 50.0}
 persistent_tasks = set()
 
 async def background_redis_listener():
-    r = redis.Redis(host=os.environ.get('REDIS_HOST', 'localhost'), port=int(os.environ.get('REDIS_PORT', 6379)), db=0)
+    r = redis.Redis(host=os.environ.get('REDIS_HOST', 'localhost'), port=6379, db=0)
     pubsub = r.pubsub()
     await pubsub.subscribe("crypto_prices")
     try:
@@ -91,6 +91,10 @@ async def background_redis_listener():
                         print(f"Trade skipped: {trade_res.get('reason')}")
                     elif trade_res.get("status") == "open":
                         print(f"Trade opened: {trade_res}")
+                    elif trade_res.get("status") == "rejected":
+                        print(f"Trade rejected: {trade_res.get('reason')}")
+                    else:
+                        print(f"Trade execution returned unknown status: {trade_res}")
 
     except Exception as e:
         import traceback
@@ -110,7 +114,7 @@ async def websocket_endpoint(websocket: WebSocket):
     WEBSOCKET_CONNECTIONS.inc()
 
     # Connect to Redis
-    r = redis.Redis(host=os.environ.get('REDIS_HOST', 'localhost'), port=int(os.environ.get('REDIS_PORT', 6379)), db=int(os.environ.get('REDIS_DB', 0)))
+    r = redis.Redis(host=os.environ.get('REDIS_HOST', 'localhost'), port=6379, db=0)
     pubsub = r.pubsub()
     await pubsub.subscribe("crypto_prices")
 

@@ -120,13 +120,13 @@ export default function OllamaExecutionPanel({ data }: OllamaExecutionPanelProps
 
                 {/* Open Orders / Positions Tab */}
                 <div className="flex-1 bg-surface-container-lowest rounded-lg border border-outline-variant/10 p-3 flex flex-col overflow-hidden">
-                    <h3 className="text-[10px] uppercase tracking-widest text-outline font-bold mb-2 pb-2 border-b border-outline-variant/10">Active Positions ({data.trades.active.length})</h3>
+                    <h3 className="text-[10px] uppercase tracking-widest text-outline font-bold mb-2 pb-2 border-b border-outline-variant/10">Active Positions ({(data.trades?.active?.length || 0)})</h3>
                     <div className="flex-1 overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-slate-700">
-                        {data.trades.active.length === 0 ? (
+                        {(data.trades?.active?.length || 0) === 0 ? (
                             <div className="text-[10px] text-outline/50 text-center py-4 italic">No open trades</div>
                         ) : (
                             <div className="space-y-2">
-                                {data.trades.active.map((trade) => {
+                                {(data.trades?.active || []).map((trade) => {
                                     // Calculate live PnL if currentPrice is available
                                     let currentPnl = 0;
                                     let pnlColor = "text-on-surface-variant";
