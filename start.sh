@@ -6,7 +6,7 @@ cleanup() {
     echo "Stopping all processes..."
     for PID in "${PIDS[@]}"; do
         if kill -0 "$PID" 2>/dev/null; then
-            kill "$PID" || true
+            kill -9 "$PID" || true
         fi
     done
     pkill -f "uvicorn app.main:app" || true

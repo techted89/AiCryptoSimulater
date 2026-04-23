@@ -23,7 +23,8 @@ export default function GroqStrategyPanel({ data }: GroqStatePanelProps) {
 
   const analysisLines = useMemo(() => {
     if (!data?.latest_analysis) return null;
-    return data.latest_analysis.split('\n').map((line, i) => {
+    return data.latest_analysis.split('
+').map((line, i) => {
       if (!line.trim()) return <br key={i} />;
       let colorClass = "text-on-surface-variant";
       let isRecommendation = false;

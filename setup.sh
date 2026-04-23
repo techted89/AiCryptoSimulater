@@ -33,7 +33,7 @@ pip install -r requirements.txt
 echo "4. Installing Frontend Node Dependencies..."
 cd frontend
 # Clean install to avoid missing .bin symlinks
-rm -rf node_modules
+rm -rf node_modules package-lock.json
 npm install --legacy-peer-deps
 
 echo "========================================="
