@@ -10,24 +10,37 @@ echo "========================================="
 echo "1. Checking/Installing Redis..."
 if ! command -v redis-server &> /dev/null
 then
-    echo "Redis could not be found. Please install Redis manually."
-    echo "On Ubuntu/Debian: sudo apt-get update && sudo apt-get install redis-server"
-    echo "On MacOS: brew install redis"
+    echo "Redis could not be found. Attempting to install via apt-get..."
+    if command -v apt-get &> /dev/null; then
+        sudo apt-get update -y
+        sudo apt-get install -y redis-server
+    else
+        echo "Please install Redis manually. E.g. brew install redis"
+    fi
 else
     echo "Redis is already installed."
 fi
 
-echo "2. Installing Backend Python Dependencies..."
-pip install -r requirements.txt
-pip install pytest pytest-asyncio # Ensure test dependencies are present
+echo "2. Setting up Python Virtual Environment..."
+if [ ! -d "venv" ]; then
+    python3 -m venv venv
+fi
+source venv/bin/activate
 
-echo "3. Installing Frontend Node Dependencies..."
+echo "3. Installing Backend Python Dependencies..."
+pip install -r requirements.txt
+
+echo "4. Installing Frontend Node Dependencies..."
 cd frontend
-npm install
+# Clean install to avoid missing .bin symlinks
+rm -rf node_modules package-lock.json
+npm install --legacy-peer-deps
 
 echo "========================================="
 echo " Setup Complete!                         "
 echo "========================================="
-echo "To run the application, simply execute the startup script:"
+echo "To run the application natively, execute:"
 echo "  ./start.sh"
+echo "To run via Docker, execute:"
+echo "  docker-compose up --build"
 echo "========================================="
