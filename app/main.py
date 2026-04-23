@@ -106,7 +106,7 @@ async def websocket_endpoint(websocket: WebSocket):
     WEBSOCKET_CONNECTIONS.inc()
 
     # Connect to Redis
-    r = redis.Redis(host=os.environ.get('REDIS_HOST', 'localhost'), port=6379, db=0)
+    r = redis.Redis(host=os.environ.get('REDIS_HOST', 'localhost'), port=int(os.environ.get('REDIS_PORT', 6379)), db=int(os.environ.get('REDIS_DB', 0)))
     pubsub = r.pubsub()
     await pubsub.subscribe("crypto_prices")
 
