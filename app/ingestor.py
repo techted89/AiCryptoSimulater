@@ -1,3 +1,4 @@
+import os
 import asyncio
 import json
 import random
@@ -117,7 +118,7 @@ async def publish_data(r):
 
 async def simulate_data_ingestion():
     # Connect to the local Redis instance
-    r = redis.Redis(host='localhost', port=6379, db=0)
+    r = redis.Redis(host=os.environ.get('REDIS_HOST', 'localhost'), port=6379, db=0)
 
     exchange = ccxt.binanceus()
 

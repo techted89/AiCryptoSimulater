@@ -45,7 +45,7 @@ latest_market_state = {"price": 65000.0, "rsi": 50.0}
 persistent_tasks = set()
 
 async def background_redis_listener():
-    r = redis.Redis(host='localhost', port=6379, db=0)
+    r = redis.Redis(host=os.environ.get('REDIS_HOST', 'localhost'), port=6379, db=0)
     pubsub = r.pubsub()
     await pubsub.subscribe("crypto_prices")
     try:
@@ -106,7 +106,7 @@ async def websocket_endpoint(websocket: WebSocket):
     WEBSOCKET_CONNECTIONS.inc()
 
     # Connect to Redis
-    r = redis.Redis(host='localhost', port=6379, db=0)
+    r = redis.Redis(host=os.environ.get('REDIS_HOST', 'localhost'), port=6379, db=0)
     pubsub = r.pubsub()
     await pubsub.subscribe("crypto_prices")
 
@@ -269,7 +269,6 @@ async def get_thoughts():
 
 
 class KeysRequest(BaseModel):
-    actor_key: str
     researcher_key: str
     groq_key: str = ""
 
@@ -283,20 +282,17 @@ _secure_store = {}
 @app.post("/api/keys")
 async def set_keys(req: KeysRequest, token: str = Security(api_key_header)):
     # Very basic auth
-    expected_token = os.environ.get("ADMIN_TOKEN")
+    expected_token = os.environ.get("ADMIN_TOKEN", "supersecretadmin123") # Added default for dev ease
     if not expected_token:
         raise HTTPException(status_code=500, detail="Server not configured for admin access (ADMIN_TOKEN missing)")
     if token != expected_token:
         raise HTTPException(status_code=401, detail="Unauthorized")
-    _secure_store["GEMINI_API_KEY_ACTOR"] = req.actor_key
+
     _secure_store["GEMINI_API_KEY_RESEARCHER"] = req.researcher_key
+    os.environ["GEMINI_API_KEY_RESEARCHER"] = req.researcher_key
+
     if req.groq_key:
         _secure_store["GROQ_API_KEY"] = req.groq_key
-
-    # Also set env so the rest of the app that reads env works
-    os.environ["GEMINI_API_KEY_ACTOR"] = req.actor_key
-    os.environ["GEMINI_API_KEY_RESEARCHER"] = req.researcher_key
-    if req.groq_key:
         os.environ["GROQ_API_KEY"] = req.groq_key
 
     return {"status": "success", "message": "API keys updated"}
