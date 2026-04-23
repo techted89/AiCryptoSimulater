@@ -49,7 +49,7 @@ if [ -d "venv" ]; then
 fi
 
 echo "Starting Backend API..."
-uvicorn app.main:app --host 0.0.0.0 --port 8000 > backend.log 2>&1 &
+uvicorn app.main:app --host 127.0.0.1 --port 8000 > backend.log 2>&1 &
 PIDS+=($!)
 
 echo "Starting Data Ingestor..."
