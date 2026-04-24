@@ -34,10 +34,14 @@ echo "4. Installing Frontend Node Dependencies..."
 cd frontend
 # Clean install to avoid missing .bin symlinks
 rm -rf node_modules
-npm install --legacy-peer-deps
+# Use --no-audit to prevent misleading vulnerability warnings that prompt destructive --force fixes
+npm install --legacy-peer-deps --no-audit
 
 echo "========================================="
 echo " Setup Complete!                         "
+echo "========================================="
+echo "WARNING: Do NOT run 'npm audit fix --force' inside the frontend directory."
+echo "It will aggressively downgrade critical dependencies and break the application."
 echo "========================================="
 echo "To run the application natively, execute:"
 echo "  ./start.sh"
