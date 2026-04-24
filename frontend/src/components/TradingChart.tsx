@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState, useRef, useMemo } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   LineChart,
   Line,
@@ -111,20 +111,14 @@ export default function TradingChart({ activeTrades = [], historyTrades = [] }: 
     };
   }, []);
 
-
   // Calculate a mock "Liquidation Heatmap" band based on the current price
   // We'll show this as ReferenceAreas or just plot lines if we had them,
   // but for simplicity we'll just plot a custom reference line area representing "High Leverage Longs"
-  const currentPrice = useMemo(() => {
-    return data.length > 0 ? data[data.length - 1].price : 0;
-  }, [data]);
+  const currentPrice = data.length > 0 ? data[data.length - 1].price : 0;
+  const longLiqBand = currentPrice * 0.98; // 2% drop
+  const shortLiqBand = currentPrice * 1.02; // 2% pump
 
-  const longLiqBand = useMemo(() => currentPrice * 0.98, [currentPrice]); // 2% drop
-  const shortLiqBand = useMemo(() => currentPrice * 1.02, [currentPrice]); // 2% pump
-
-  const displayData = useMemo(() => {
-    return timeWindow > 0 ? data.slice(-timeWindow) : data;
-  }, [data, timeWindow]);
+  const displayData = timeWindow > 0 ? data.slice(-timeWindow) : data;
 
   const indicatorConfigs: Record<string, { title: string, color: string, domain: [any, any], referenceLines?: { y: number, color: string }[] }> = {
     rsi: { title: "RSI (Relative Strength Index)", color: "#3b82f6", domain: [0, 100], referenceLines: [{ y: 30, color: "#10b981" }, { y: 70, color: "#ef4444" }] },

@@ -51,12 +51,12 @@ if [ -d "venv" ]; then
 fi
 
 echo "Starting Backend API..."
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload > backend.log 2>&1 &
+uvicorn app.main:app --host 0.0.0.0 --port 8000 > backend.log 2>&1 &
 BACKEND_PID=$!
 PIDS+=("$BACKEND_PID")
 
 echo "Starting Data Ingestor..."
-python3 app/ingestor.py > ingestor.log 2>&1 &
+PYTHONPATH=. python app/ingestor.py > ingestor.log 2>&1 &
 INGESTOR_PID=$!
 PIDS+=("$INGESTOR_PID")
 
@@ -87,7 +87,7 @@ wait_for_url() {
     local RETRIES=0
 
     echo -n "Waiting for $SERVICE_NAME to be ready..."
-    while ! curl -fsS --connect-timeout 2 --max-time 5 "$URL" > /dev/null 2>&1; do
+    while ! curl -fsS "$URL" > /dev/null 2>&1; do
         if [ $RETRIES -eq $MAX_RETRIES ]; then
             echo " Failed!"
             return 1
@@ -119,11 +119,10 @@ fi
 if kill -0 "$INGESTOR_PID" 2>/dev/null; then
     echo "Data Ingestor is running."
 else
-    echo "Error: Data Ingestor process is not running."
+    echo "Warning: Data Ingestor process is not running."
     echo "--- Ingestor Logs ---"
     tail -n 50 ingestor.log
     echo "---------------------"
-    exit 1
 fi
 
 echo "========================================="
