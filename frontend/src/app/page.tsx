@@ -225,11 +225,22 @@ export default function Home() {
 
       {/* Footer */}
       <footer className="fixed bottom-0 left-0 right-0 z-50 bg-[#0a0e14] h-8 flex justify-between items-center px-6 border-t border-[#3b494b]/15">
-        <span className="font-mono text-[10px] uppercase tracking-widest text-[#05e777]">SYSTEM STATUS: OPERATIONAL // LATENCY 12MS</span>
+        <span className="font-mono text-[10px] uppercase tracking-widest text-[#05e777]">
+          SYSTEM STATUS: {agentState ? "OPERATIONAL" : "CONNECTING..."}
+        </span>
         <div className="flex items-center gap-4 font-mono text-[10px] uppercase tracking-widest">
-          <span className="text-[#849495] hover:text-[#00F0FF] transition-colors cursor-default">API status</span>
-          <span className="text-[#849495] hover:text-[#00F0FF] transition-colors cursor-default">Ollama Local</span>
-          <span className="text-[#849495] hover:text-[#00F0FF] transition-colors cursor-default">Gemini Pro</span>
+          <span className={`transition-colors cursor-default flex items-center gap-1 ${agentState ? 'text-[#05e777]' : 'text-[#ffb4ab]'}`}>
+            <span className={`w-2 h-2 rounded-full ${agentState ? 'bg-[#05e777]' : 'bg-[#ffb4ab] animate-pulse'}`}></span>
+            Backend API
+          </span>
+          <span className={`transition-colors cursor-default flex items-center gap-1 ${agentState?.ollama ? 'text-[#05e777]' : 'text-[#ffb4ab]'}`}>
+            <span className={`w-2 h-2 rounded-full ${agentState?.ollama ? 'bg-[#05e777]' : 'bg-[#ffb4ab] animate-pulse'}`}></span>
+            Ollama Agent
+          </span>
+          <span className={`transition-colors cursor-default flex items-center gap-1 ${agentState?.gemini ? 'text-[#05e777]' : 'text-[#ffb4ab]'}`}>
+            <span className={`w-2 h-2 rounded-full ${agentState?.gemini ? 'bg-[#05e777]' : 'bg-[#ffb4ab] animate-pulse'}`}></span>
+            ChromaDB
+          </span>
         </div>
       </footer>
 
