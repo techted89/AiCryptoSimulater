@@ -41,6 +41,9 @@ class ActorAgent:
 
 
     async def evaluate_exits(self, current_price: float, l2_book: dict = None):
+        if price is None or not isinstance(price, (int, float)):
+            return
+
         """Autonomously decides when to close trades based on profit targets, stop loss, or LLM analysis."""
         trades_to_close = []
         positions = list(self.open_positions.items())
@@ -119,6 +122,10 @@ class ActorAgent:
         Returns:
             dict: Trade execution result details.
         """
+        if price is None or not isinstance(price, (int, float)):
+            return {"status": "error", "reason": "Invalid price data"}
+        if l2_book is not None and not isinstance(l2_book, dict):
+            return {"status": "error", "reason": "Invalid l2_book data"}
         if self.circuit_breaker_active:
              return {"status": "rejected", "reason": "Circuit Breaker Active"}
 
@@ -160,7 +167,7 @@ class ActorAgent:
             total_tokens_bought = 0.0
             vwap_sum = 0.0
 
-            for ask_price, ask_vol in l2_book["asks"]:
+            for ask_price, ask_vol in l2_book["asks"][:10]:
                 if remaining_usd <= 0:
                     break
                 available_usd_at_level = ask_price * ask_vol
@@ -234,7 +241,7 @@ class ActorAgent:
             remaining_tokens = trade["tokens"]
             total_usd_received = 0.0
 
-            for bid_price, bid_vol in l2_book["bids"]:
+            for bid_price, bid_vol in l2_book["bids"][:10]:
                 if remaining_tokens <= 0:
                     break
                 tokens_to_take = min(remaining_tokens, bid_vol)

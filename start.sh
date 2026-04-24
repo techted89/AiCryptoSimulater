@@ -100,6 +100,11 @@ wait_for_url() {
     return 0
 }
 
+if ! wait_for_url "http://74.208.167.101:11434" "Ollama Agent"; then
+    echo "Error: Ollama Agent failed to start. The Actor Agent requires Ollama."
+    exit 1
+fi
+
 if ! wait_for_url "http://localhost:8000/" "Backend API"; then
     echo "Error: Backend API failed to start."
     echo "--- Backend Logs ---"

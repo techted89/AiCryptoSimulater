@@ -7,7 +7,7 @@
 | **Logic & Error Handling** | `actor_agent.py` loops over the entire `l2_book` array ($O(N)$) multiple times inside `execute_trade` and `close_trade` which blocks the event loop for a highly volatile websocket feed. | Pre-calculate/cache `vwap` (Volume Weighted Average Price) asynchronously outside the trade loop or limit parsing to the top 5-10 depth levels instead of full iterations. |
 | **Safety Checks** | `latest_market_state["price"]` and `l2_book` values are blindly passed to `execute_trade` and `evaluate_exits` without strict validation. | Implement `None` and type checking before executing logic to prevent runtime exceptions if the ingestor sends malformed or partial payloads. |
 | **Frontend Render** | `TradingChart.tsx` state array size approaches `MAX_DATA_POINTS = 10000`, causing React to duplicate and render massive DOM elements inside Recharts with every 500ms tick. | Drop `MAX_DATA_POINTS` significantly (e.g. to 500) and use React Virtualization or a Canvas-based charting library (like Lightweight Charts) instead of SVG-based Recharts for high-density streaming. |
-| **Dependency Risks** | `package.json` has deprecated dependencies that cause warnings during `npm install` and fail audits. | Explicitly remove legacy dependencies and manage `npm install --no-audit` to avoid destructive `npm audit fix --force` breakages by the user. |
+| **Dependency Risks** | `package.json` has deprecated dependencies that cause warnings during `npm install` and fail audits. | Explicitly document the risks of using `npm audit fix --force` while keeping standard audits enabled to maintain security visibility without unintentionally breaking core application functionality. |
 
 ## 2. Performance Wins
 

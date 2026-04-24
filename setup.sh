@@ -35,7 +35,7 @@ cd frontend
 # Clean install to avoid missing .bin symlinks
 rm -rf node_modules
 # Use --no-audit to prevent misleading vulnerability warnings that prompt destructive --force fixes
-npm install --legacy-peer-deps --no-audit
+npm install --legacy-peer-deps
 
 echo "========================================="
 echo " Setup Complete!                         "
