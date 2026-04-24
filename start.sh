@@ -56,7 +56,7 @@ BACKEND_PID=$!
 PIDS+=("$BACKEND_PID")
 
 echo "Starting Data Ingestor..."
-python app/ingestor.py > ingestor.log 2>&1 &
+python3 app/ingestor.py > ingestor.log 2>&1 &
 INGESTOR_PID=$!
 PIDS+=("$INGESTOR_PID")
 
@@ -86,7 +86,7 @@ wait_for_url() {
     local RETRIES=0
 
     echo -n "Waiting for $SERVICE_NAME to be ready..."
-    while ! curl -fsS "$URL" > /dev/null 2>&1; do
+    while ! curl -fsS --connect-timeout 2 --max-time 5 "$URL" > /dev/null 2>&1; do
         if [ $RETRIES -eq $MAX_RETRIES ]; then
             echo " Failed!"
             return 1
@@ -101,18 +101,28 @@ wait_for_url() {
 
 if ! wait_for_url "http://localhost:8000/" "Backend API"; then
     echo "Error: Backend API failed to start."
+    echo "--- Backend Logs ---"
+    tail -n 50 backend.log
+    echo "--------------------"
     exit 1
 fi
 
 if ! wait_for_url "http://localhost:3000/" "Frontend"; then
     echo "Error: Frontend failed to start."
+    echo "--- Frontend Logs ---"
+    tail -n 50 frontend.log
+    echo "---------------------"
     exit 1
 fi
 
 if kill -0 "$INGESTOR_PID" 2>/dev/null; then
     echo "Data Ingestor is running."
 else
-    echo "Warning: Data Ingestor process is not running."
+    echo "Error: Data Ingestor process is not running."
+    echo "--- Ingestor Logs ---"
+    tail -n 50 ingestor.log
+    echo "---------------------"
+    exit 1
 fi
 
 echo "========================================="
