@@ -187,8 +187,8 @@ async def broadcast_state_task():
                     }
                 },
                 "gemini": {
-                    "db_size": research_agent.client.get_collection(name="market_memories").count() if research_agent.client else 0,
-                    "recent_snapshots": research_agent.get_recent_snapshots() if hasattr(research_agent, "get_recent_snapshots") else []
+                    "db_size": await run_in_threadpool(lambda: research_agent.client.get_collection(name="market_memories").count() if research_agent.client else 0),
+                    "recent_snapshots": await run_in_threadpool(lambda: research_agent.get_recent_snapshots() if hasattr(research_agent, "get_recent_snapshots") else [])
                 },
                 "price": latest_market_state.get("price")
             }

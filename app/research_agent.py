@@ -220,7 +220,8 @@ class ResearchAgent:
 
     def get_recent_snapshots(self, limit=10):
         try:
-            results = self.collection.get(limit=limit)
+            # fetch a larger batch as chroma get has no sort natively
+            results = self.collection.get()
             snapshots = []
             if results and results.get("metadatas"):
                 for meta in results["metadatas"]:
@@ -234,7 +235,7 @@ class ResearchAgent:
                     })
                 # Sort descending by timestamp
                 snapshots.sort(key=lambda x: x["timestamp"], reverse=True)
-            return snapshots
+            return snapshots[:limit]
         except Exception as e:
             logger.exception(f"Error getting recent snapshots: {e}")
             return []

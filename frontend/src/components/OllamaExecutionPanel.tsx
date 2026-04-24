@@ -123,8 +123,8 @@ export default function OllamaExecutionPanel({ data }: OllamaExecutionPanelProps
                     <div className="flex justify-between items-center mb-2 pb-2 border-b border-outline-variant/10">
                         <h3 className="text-[10px] uppercase tracking-widest text-outline font-bold">Active Positions ({(data.trades?.active?.length || 0)})</h3>
                         <div className="text-[9px] font-mono text-outline">
-                            Wallet: <span className="text-primary-fixed-dim">${data.stats?.wallet_value?.toLocaleString(undefined, {minimumFractionDigits: 2}) || '---'}</span> |
-                            PnL: <span className={data.stats?.floating_pnl && data.stats.floating_pnl >= 0 ? 'text-secondary' : 'text-error'}>{data.stats?.floating_pnl && data.stats.floating_pnl >= 0 ? '+' : ''}{data.stats?.floating_pnl?.toFixed(2) || '0.00'}</span>
+                            Wallet: <span className="text-primary-fixed-dim">${data.stats?.wallet_value?.toLocaleString(undefined, {minimumFractionDigits: 2}) ?? '---'}</span> |
+                            PnL: <span className={data.stats?.floating_pnl != null && data.stats.floating_pnl >= 0 ? 'text-secondary' : 'text-error'}>{data.stats?.floating_pnl != null && data.stats.floating_pnl >= 0 ? '+' : ''}{data.stats?.floating_pnl?.toFixed(2) ?? '0.00'}</span>
                         </div>
                     </div>
                     <div className="flex-1 overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-slate-700">
@@ -173,13 +173,13 @@ export default function OllamaExecutionPanel({ data }: OllamaExecutionPanelProps
                         ) : (
                             <div className="space-y-2">
                                 {(data.trades?.history || []).slice().reverse().map((trade) => {
-                                    const isWin = trade.pnl && trade.pnl >= 0;
+                                    const isWin = trade.pnl != null && trade.pnl >= 0;
                                     return (
                                         <div key={trade.id} className="bg-surface-container-lowest p-2 rounded border border-outline-variant/5 text-[9px] font-mono">
                                             <div className="flex justify-between mb-1">
                                                 <span className="font-bold text-on-surface-variant">{trade.symbol}</span>
                                                 <span className={`font-bold ${isWin ? 'text-secondary' : 'text-error'}`}>
-                                                    {isWin ? '+' : ''}{trade.pnl?.toFixed(2) || '---'}
+                                                    {isWin ? '+' : ''}{trade.pnl != null ? trade.pnl.toFixed(2) : '---'}
                                                 </span>
                                             </div>
                                             <div className="flex justify-between text-outline/70">
