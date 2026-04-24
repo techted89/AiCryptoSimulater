@@ -303,6 +303,7 @@ class ControlRequest(BaseModel):
 async def admin_control(req: ControlRequest):
     if req.action == "reset_wallet":
         actor_agent.balance = 10000.0
+        actor_agent.wallet_value = 10000.0
         actor_agent.mock_trades = []
         actor_agent.open_positions = {}
         actor_agent.wins = 0
