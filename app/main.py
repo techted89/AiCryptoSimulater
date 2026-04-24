@@ -3,6 +3,9 @@ import json
 from fastapi import HTTPException, Security
 from fastapi.security import APIKeyHeader
 import os
+import logging
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
 import time
 import random
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
@@ -88,17 +91,20 @@ async def background_redis_listener():
                     )
                     trade_res = await actor_agent.execute_trade("BTC", latest_market_state["price"], conf, l2_book)
                     if trade_res.get("status") == "skipped":
-                        print(f"Trade skipped: {trade_res.get('reason')}")
+                        import logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+logger.info(f"Trade skipped: {trade_res.get('reason')}")
                     elif trade_res.get("status") == "open":
-                        print(f"Trade opened: {trade_res}")
+                        logger.info(f"Trade opened: {trade_res}")
                     elif trade_res.get("status") == "rejected":
-                        print(f"Trade rejected: {trade_res.get('reason')}")
+                        logger.info(f"Trade rejected: {trade_res.get('reason')}")
                     else:
-                        print(f"Trade execution returned unknown status: {trade_res}")
+                        logger.info(f"Trade execution returned unknown status: {trade_res}")
 
     except Exception as e:
         import traceback
-        print(f"Background Redis Error: {e}")
+        logger.info(f"Background Redis Error: {e}")
         traceback.print_exc()
     finally:
         await pubsub.unsubscribe("crypto_prices")
@@ -121,7 +127,7 @@ async def websocket_endpoint(websocket: WebSocket):
     last_send_time = 0.0
     throttle_interval = 0.5  # Only send updates every 500ms
 
-    print("Client connected to /ws/prices")
+    logger.info("Client connected to /ws/prices")
     try:
         async for message in pubsub.listen():
             if message["type"] == "message":
@@ -135,14 +141,14 @@ async def websocket_endpoint(websocket: WebSocket):
                         await websocket.send_text(data)
                         last_send_time = current_time
                     except WebSocketDisconnect:
-                        print("Client disconnected.")
+                        logger.info("Client disconnected.")
                         break
                     except Exception as e:
-                        print(f"Error sending message: {e}")
+                        logger.info(f"Error sending message: {e}")
                         break
 
     except Exception as e:
-        print(f"WebSocket Error: {e}")
+        logger.info(f"WebSocket Error: {e}")
     finally:
         WEBSOCKET_CONNECTIONS.dec()
         await pubsub.unsubscribe("crypto_prices")
@@ -200,7 +206,7 @@ async def broadcast_state_task():
 
             await asyncio.sleep(1.0) # Update rate
         except Exception as e:
-            print(f"Broadcast State Error: {e}")
+            logger.info(f"Broadcast State Error: {e}")
             await asyncio.sleep(1.0)
 
 @app.on_event("startup")
@@ -218,7 +224,7 @@ async def state_websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     WEBSOCKET_CONNECTIONS.inc()
     active_state_connections.append(websocket)
-    print("Client connected to /ws/state")
+    logger.info("Client connected to /ws/state")
 
     # Send current state immediately upon connection if available
     if shared_agent_state:
@@ -233,9 +239,9 @@ async def state_websocket_endpoint(websocket: WebSocket):
             await websocket.receive_text()
 
     except WebSocketDisconnect:
-        print("Client disconnected from /ws/state")
+        logger.info("Client disconnected from /ws/state")
     except Exception as e:
-        print(f"State WebSocket Error: {e}")
+        logger.info(f"State WebSocket Error: {e}")
     finally:
         if websocket in active_state_connections:
             active_state_connections.remove(websocket)
