@@ -48,7 +48,7 @@ latest_market_state = {"price": 65000.0, "rsi": 50.0}
 persistent_tasks = set()
 
 async def background_redis_listener():
-    r = redis.Redis(host=os.environ.get('REDIS_HOST', 'localhost'), port=int(os.environ.get('REDIS_PORT', '6379')), db=int(os.environ.get('REDIS_DB', '0')))
+    r = redis.Redis(host=os.environ.get('REDIS_HOST', 'localhost'), port=int(os.environ.get('REDIS_PORT') or 6379), db=int(os.environ.get('REDIS_DB') or 0))
     pubsub = r.pubsub()
     await pubsub.subscribe("crypto_prices")
     try:
