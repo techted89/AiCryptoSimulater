@@ -46,6 +46,10 @@ class ActorAgent:
         positions = list(self.open_positions.items())
 
         async with aiohttp.ClientSession() as session:
+            ollama_url = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
+            ollama_model = os.environ.get("OLLAMA_MODEL", "deepseek-r1:8b")
+            groq_key = os.environ.get("GROQ_API_KEY")
+
             for trade_id, trade in positions:
                 entry_price = trade["entry_price"]
                 pnl_pct = (current_price - entry_price) / entry_price
@@ -60,8 +64,6 @@ class ActorAgent:
                     prompt = f"Trade ID: {trade_id}\nSymbol: {trade['symbol']}\nEntry Price: {entry_price}\nCurrent Price: {current_price}\nPnL: {pnl_pct*100:.2f}%\n\nShould I CLOSE this trade or HOLD? Respond strictly with 'CLOSE' or 'HOLD'."
 
                     try:
-                        ollama_url = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
-                        ollama_model = os.environ.get("OLLAMA_MODEL", "deepseek-r1:8b")
                         async with session.post(
                             f"{ollama_url}/v1/chat/completions",
                             json={"model": ollama_model, "messages": [{"role": "user", "content": prompt}]},
@@ -77,7 +79,6 @@ class ActorAgent:
                                 raise Exception("Ollama error")
                     except Exception as e:
                         # Fallback to Groq
-                        groq_key = os.environ.get("GROQ_API_KEY")
                         if groq_key:
                             try:
                                 headers = {"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"}
