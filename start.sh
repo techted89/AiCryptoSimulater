@@ -118,10 +118,11 @@ fi
 if kill -0 "$INGESTOR_PID" 2>/dev/null; then
     echo "Data Ingestor is running."
 else
-    echo "Warning: Data Ingestor process is not running."
+    echo "Error: Data Ingestor process is not running."
     echo "--- Ingestor Logs ---"
     tail -n 50 ingestor.log
     echo "---------------------"
+    exit 1
 fi
 
 echo "========================================="
