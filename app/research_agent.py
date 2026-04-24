@@ -221,7 +221,7 @@ class ResearchAgent:
     def get_recent_snapshots(self, limit=10):
         try:
             # fetch a larger batch as chroma get has no sort natively
-            results = self.collection.get()
+            results = self.collection.get(limit=1000)
             snapshots = []
             if results and results.get("metadatas"):
                 for meta in results["metadatas"]:

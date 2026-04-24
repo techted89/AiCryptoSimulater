@@ -92,10 +92,7 @@ async def background_redis_listener():
                     )
                     trade_res = await actor_agent.execute_trade("BTC", latest_market_state["price"], conf, l2_book)
                     if trade_res.get("status") == "skipped":
-                        import logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-logger.info(f"Trade skipped: {trade_res.get('reason')}")
+                        logger.info(f"Trade skipped: {trade_res.get('reason')}")
                     elif trade_res.get("status") == "open":
                         logger.info(f"Trade opened: {trade_res}")
                     elif trade_res.get("status") == "rejected":
@@ -104,9 +101,7 @@ logger.info(f"Trade skipped: {trade_res.get('reason')}")
                         logger.info(f"Trade execution returned unknown status: {trade_res}")
 
     except Exception as e:
-        import traceback
         logger.exception(f"Background Redis Error: {e}")
-        traceback.print_exc()
     finally:
         await pubsub.unsubscribe("crypto_prices")
         await r.close()
@@ -187,7 +182,7 @@ async def broadcast_state_task():
                     }
                 },
                 "gemini": {
-                    "db_size": await run_in_threadpool(lambda: research_agent.client.get_collection(name="market_memories").count() if research_agent.client else 0),
+                    "db_size": await run_in_threadpool(lambda: research_agent.collection.count() if hasattr(research_agent, "collection") and research_agent.collection else 0),
                     "recent_snapshots": await run_in_threadpool(lambda: research_agent.get_recent_snapshots() if hasattr(research_agent, "get_recent_snapshots") else [])
                 },
                 "price": latest_market_state.get("price")

@@ -167,7 +167,7 @@ export default function OllamaExecutionPanel({ data }: OllamaExecutionPanelProps
                     </div>
 
                     <h3 className="text-[10px] uppercase tracking-widest text-outline font-bold mt-4 mb-2 pb-2 border-b border-outline-variant/10">Recent History ({(data.trades?.history?.length || 0)})</h3>
-                    <div className="flex-1 overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-slate-700 max-h-[100px]">
+                    <div className="shrink-0 h-[100px] overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-slate-700">
                         {(data.trades?.history?.length || 0) === 0 ? (
                             <div className="text-[10px] text-outline/50 text-center py-4 italic">No recent trades</div>
                         ) : (
