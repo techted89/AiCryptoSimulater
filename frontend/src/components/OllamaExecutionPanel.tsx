@@ -23,9 +23,9 @@ interface OllamaExecutionPanelProps {
         max_drawdown: number;
         circuit_breaker_active: boolean;
     };
-    trades: {
-        active: Trade[];
-        history: Trade[];
+    trades?: {
+        active?: Trade[];
+        history?: Trade[];
     };
     l2_book?: {
         bids: number[][];

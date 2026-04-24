@@ -83,6 +83,7 @@ export default function Home() {
       alert('Keys updated successfully (Memory only)');
       setApiModalOpen(false);
     } catch (e) {
+      console.error(e);
       alert('Failed to update keys');
     } finally {
       setLoading(false);
