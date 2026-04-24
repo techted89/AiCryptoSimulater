@@ -3,10 +3,7 @@ from chromadb.config import Settings
 import uuid
 import datetime
 import os
-import logging
 from app.gemini_utils import call_gemini_with_retry
-
-logger = logging.getLogger(__name__)
 
 
 class ResearchAgent:
@@ -236,9 +233,8 @@ class ResearchAgent:
                 snapshots.sort(key=lambda x: x["timestamp"], reverse=True)
             return snapshots
         except Exception as e:
-            logger.exception(f"Error getting recent snapshots: {e}")
+            print(f"Error getting recent snapshots: {e}")
             return []
-
 if __name__ == "__main__":
     agent = ResearchAgent()
     doc_id = agent.record_snapshot("BTC", 65000, 25)

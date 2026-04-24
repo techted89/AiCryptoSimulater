@@ -15,7 +15,7 @@ interface Trade {
 
 interface OllamaExecutionPanelProps {
   data: {
-    stats: {
+    stats?: {
         balance: number;
         wallet_value: number;
         floating_pnl: number;

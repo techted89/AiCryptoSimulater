@@ -14,6 +14,7 @@ from fastapi.responses import PlainTextResponse
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 import redis.asyncio as redis
+from app.utils.redis import get_redis_client
 from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST
 from app.actor_agent import ActorAgent
 from app.research_agent import ResearchAgent
@@ -48,7 +49,7 @@ latest_market_state = {"price": 65000.0, "rsi": 50.0}
 persistent_tasks = set()
 
 async def background_redis_listener():
-    r = redis.Redis(host=os.environ.get('REDIS_HOST', 'localhost'), port=int(os.environ.get('REDIS_PORT') or 6379), db=int(os.environ.get('REDIS_DB') or 0))
+    r = get_redis_client()
     pubsub = r.pubsub()
     await pubsub.subscribe("crypto_prices")
     try:
@@ -91,7 +92,10 @@ async def background_redis_listener():
                     )
                     trade_res = await actor_agent.execute_trade("BTC", latest_market_state["price"], conf, l2_book)
                     if trade_res.get("status") == "skipped":
-                        logger.info(f"Trade skipped: {trade_res.get('reason')}")
+                        import logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+logger.info(f"Trade skipped: {trade_res.get('reason')}")
                     elif trade_res.get("status") == "open":
                         logger.info(f"Trade opened: {trade_res}")
                     elif trade_res.get("status") == "rejected":
@@ -100,7 +104,9 @@ async def background_redis_listener():
                         logger.info(f"Trade execution returned unknown status: {trade_res}")
 
     except Exception as e:
+        import traceback
         logger.exception(f"Background Redis Error: {e}")
+        traceback.print_exc()
     finally:
         await pubsub.unsubscribe("crypto_prices")
         await r.close()
@@ -115,7 +121,7 @@ async def websocket_endpoint(websocket: WebSocket):
     WEBSOCKET_CONNECTIONS.inc()
 
     # Connect to Redis
-    r = redis.Redis(host=os.environ.get('REDIS_HOST', 'localhost'), port=int(os.environ.get('REDIS_PORT', '6379')), db=int(os.environ.get('REDIS_DB', '0')))
+    r = get_redis_client()
     pubsub = r.pubsub()
     await pubsub.subscribe("crypto_prices")
 
@@ -172,11 +178,6 @@ async def broadcast_state_task():
             active = list(actor_agent.open_positions.values())
             history = actor_agent.mock_trades[-20:] # Last 20 closed
 
-            # Get db_size via threadpool to avoid blocking
-            db_size = 0
-            if research_agent and hasattr(research_agent, 'collection') and research_agent.collection:
-                db_size = await run_in_threadpool(research_agent.collection.count)
-
             shared_agent_state = {
                 "ollama": {
                     "stats": stats,
@@ -186,7 +187,7 @@ async def broadcast_state_task():
                     }
                 },
                 "gemini": {
-                    "db_size": db_size,
+                    "db_size": research_agent.client.get_collection(name="market_memories").count() if research_agent.client else 0,
                     "recent_snapshots": research_agent.get_recent_snapshots() if hasattr(research_agent, "get_recent_snapshots") else []
                 },
                 "price": latest_market_state.get("price")
@@ -315,15 +316,7 @@ class ControlRequest(BaseModel):
 @app.post("/api/control")
 async def admin_control(req: ControlRequest):
     if req.action == "reset_wallet":
-        actor_agent.balance = 10000.0
-        actor_agent.wallet_value = 10000.0
-        actor_agent.mock_trades = []
-        actor_agent.open_positions = {}
-        actor_agent.wins = 0
-        actor_agent.losses = 0
-        actor_agent.peak_wallet = 10000.0
-        actor_agent.max_drawdown = 0.0
-        actor_agent.circuit_breaker_active = False
+        actor_agent.reset()
         research_agent.thought_log = []
         return {"status": "success", "message": "Wallet and Circuit Breaker reset"}
     elif req.action == "trigger_trade":
