@@ -1,3 +1,5 @@
+import logging
+logger = logging.getLogger(__name__)
 import chromadb
 from chromadb.config import Settings
 import uuid
@@ -78,6 +80,7 @@ class ResearchAgent:
                         metadatas=[metadata]
                     )
         except Exception as e:
+            logger.exception(f"Failed to update snapshot success: {e}")
             self._add_thought(f"Failed to update snapshot success: {e}")
 
     def get_strategy_details(self) -> dict:
@@ -233,7 +236,7 @@ class ResearchAgent:
                 snapshots.sort(key=lambda x: x["timestamp"], reverse=True)
             return snapshots
         except Exception as e:
-            print(f"Error getting recent snapshots: {e}")
+            logger.exception(f"Error getting recent snapshots: {e}")
             return []
 if __name__ == "__main__":
     agent = ResearchAgent()
