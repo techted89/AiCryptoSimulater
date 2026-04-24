@@ -65,7 +65,7 @@ wait_for_url() {
     local RETRIES=0
 
     echo -n "Waiting for $SERVICE_NAME to be ready..."
-    while ! curl -s "$URL" > /dev/null; do
+    while ! curl -fsS "$URL" > /dev/null 2>&1; do
         if [ $RETRIES -eq $MAX_RETRIES ]; then
             echo " Failed!"
             return 1
@@ -78,8 +78,15 @@ wait_for_url() {
     return 0
 }
 
-wait_for_url "http://localhost:8000/" "Backend API"
-wait_for_url "http://localhost:3000/" "Frontend"
+if ! wait_for_url "http://localhost:8000/" "Backend API"; then
+    echo "Error: Backend API failed to start."
+    kill -INT $$
+fi
+
+if ! wait_for_url "http://localhost:3000/" "Frontend"; then
+    echo "Error: Frontend failed to start."
+    kill -INT $$
+fi
 
 if kill -0 "$INGESTOR_PID" 2>/dev/null; then
     echo "Data Ingestor is running."
