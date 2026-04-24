@@ -3,7 +3,10 @@ from chromadb.config import Settings
 import uuid
 import datetime
 import os
+import logging
 from app.gemini_utils import call_gemini_with_retry
+
+logger = logging.getLogger(__name__)
 
 
 class ResearchAgent:
@@ -215,12 +218,6 @@ class ResearchAgent:
         self._add_thought(f"Final Execution Confidence Score: {final_confidence:.2f}")
         return final_confidence
 
-if __name__ == "__main__":
-    agent = ResearchAgent()
-    doc_id = agent.record_snapshot("BTC", 65000, 25)
-    agent.update_snapshot_success(doc_id, True)
-    conf = agent.analyze_current_state("BTC", 64500, 26)
-    print(f"Confidence score: {conf}")
     def get_recent_snapshots(self, limit=10):
         try:
             results = self.collection.get(limit=limit)
@@ -228,7 +225,7 @@ if __name__ == "__main__":
             if results and results.get("metadatas"):
                 for meta in results["metadatas"]:
                     snapshots.append({
-                        "timestamp": meta.get("timestamp", 0),
+                        "timestamp": meta.get("timestamp", ""),
                         "success": str(meta.get("success", "None")),
                         "price": meta.get("price", 0.0),
                         "rsi": meta.get("rsi", 0.0),
@@ -239,5 +236,12 @@ if __name__ == "__main__":
                 snapshots.sort(key=lambda x: x["timestamp"], reverse=True)
             return snapshots
         except Exception as e:
-            print(f"Error getting recent snapshots: {e}")
+            logger.exception(f"Error getting recent snapshots: {e}")
             return []
+
+if __name__ == "__main__":
+    agent = ResearchAgent()
+    doc_id = agent.record_snapshot("BTC", 65000, 25)
+    agent.update_snapshot_success(doc_id, True)
+    conf = agent.analyze_current_state("BTC", 64500, 26)
+    print(f"Confidence score: {conf}")

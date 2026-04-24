@@ -91,10 +91,7 @@ async def background_redis_listener():
                     )
                     trade_res = await actor_agent.execute_trade("BTC", latest_market_state["price"], conf, l2_book)
                     if trade_res.get("status") == "skipped":
-                        import logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-logger.info(f"Trade skipped: {trade_res.get('reason')}")
+                        logger.info(f"Trade skipped: {trade_res.get('reason')}")
                     elif trade_res.get("status") == "open":
                         logger.info(f"Trade opened: {trade_res}")
                     elif trade_res.get("status") == "rejected":
@@ -103,9 +100,7 @@ logger.info(f"Trade skipped: {trade_res.get('reason')}")
                         logger.info(f"Trade execution returned unknown status: {trade_res}")
 
     except Exception as e:
-        import traceback
-        logger.info(f"Background Redis Error: {e}")
-        traceback.print_exc()
+        logger.exception(f"Background Redis Error: {e}")
     finally:
         await pubsub.unsubscribe("crypto_prices")
         await r.close()
@@ -144,11 +139,11 @@ async def websocket_endpoint(websocket: WebSocket):
                         logger.info("Client disconnected.")
                         break
                     except Exception as e:
-                        logger.info(f"Error sending message: {e}")
+                        logger.warning(f"Error sending message: {e}")
                         break
 
     except Exception as e:
-        logger.info(f"WebSocket Error: {e}")
+        logger.exception(f"WebSocket Error: {e}")
     finally:
         WEBSOCKET_CONNECTIONS.dec()
         await pubsub.unsubscribe("crypto_prices")
@@ -177,6 +172,11 @@ async def broadcast_state_task():
             active = list(actor_agent.open_positions.values())
             history = actor_agent.mock_trades[-20:] # Last 20 closed
 
+            # Get db_size via threadpool to avoid blocking
+            db_size = 0
+            if research_agent and hasattr(research_agent, 'collection') and research_agent.collection:
+                db_size = await run_in_threadpool(research_agent.collection.count)
+
             shared_agent_state = {
                 "ollama": {
                     "stats": stats,
@@ -186,7 +186,7 @@ async def broadcast_state_task():
                     }
                 },
                 "gemini": {
-                    "db_size": research_agent.client.get_collection(name="market_memory").count() if research_agent.client else 0,
+                    "db_size": db_size,
                     "recent_snapshots": research_agent.get_recent_snapshots() if hasattr(research_agent, "get_recent_snapshots") else []
                 },
                 "price": latest_market_state.get("price")
@@ -206,7 +206,7 @@ async def broadcast_state_task():
 
             await asyncio.sleep(1.0) # Update rate
         except Exception as e:
-            logger.info(f"Broadcast State Error: {e}")
+            logger.exception(f"Broadcast State Error: {e}")
             await asyncio.sleep(1.0)
 
 @app.on_event("startup")
@@ -241,7 +241,7 @@ async def state_websocket_endpoint(websocket: WebSocket):
     except WebSocketDisconnect:
         logger.info("Client disconnected from /ws/state")
     except Exception as e:
-        logger.info(f"State WebSocket Error: {e}")
+        logger.exception(f"State WebSocket Error: {e}")
     finally:
         if websocket in active_state_connections:
             active_state_connections.remove(websocket)
