@@ -67,19 +67,18 @@ class ResearchAgent:
 
     def update_snapshot_success(self, doc_id: str, success: bool):
         """Updates the outcome of a trade hypothesis."""
-        # Note: In a full implementation, you would retrieve the metadata, update 'success',
-        # and re-insert or update. For simplicity in this mock, we assume updates are possible
-        # via the update method.
-        # Here we do a simplistic update (in real life you'd get the doc first to keep other metadata)
-
-        results = self.collection.get(ids=[doc_id])
-        if results and results['metadatas']:
-            metadata = results['metadatas'][0]
-            metadata['success'] = str(success)
-            self.collection.update(
-                ids=[doc_id],
-                metadatas=[metadata]
-            )
+        try:
+            results = self.collection.get(ids=[doc_id])
+            if results and results.get('metadatas') and results['metadatas']:
+                metadata = results['metadatas'][0]
+                if metadata:
+                    metadata['success'] = str(success)
+                    self.collection.update(
+                        ids=[doc_id],
+                        metadatas=[metadata]
+                    )
+        except Exception as e:
+            self._add_thought(f"Failed to update snapshot success: {e}")
 
     def get_strategy_details(self) -> dict:
         """Returns details about the active trading strategy."""
