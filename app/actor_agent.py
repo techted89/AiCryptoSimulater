@@ -6,7 +6,6 @@ import aiohttp
 import traceback
 
 import os
-import json
 
 
 class ActorAgent:
@@ -21,32 +20,6 @@ class ActorAgent:
         self.wins = 0
         self.losses = 0
         self.circuit_breaker_active = False
-
-        self.state_file = "agent_state.json"
-        self._load_state()
-
-    def _load_state(self):
-        if os.path.exists(self.state_file):
-            try:
-                with open(self.state_file, "r") as f:
-                    state = json.load(f)
-                    self.peak_wallet = state.get("peak_wallet", self.peak_wallet)
-                    self.max_drawdown = state.get("max_drawdown", self.max_drawdown)
-                    self.circuit_breaker_active = state.get("circuit_breaker_active", self.circuit_breaker_active)
-            except Exception as e:
-                print(f"Error loading agent state: {e}")
-
-    def _save_state(self):
-        state = {
-            "peak_wallet": self.peak_wallet,
-            "max_drawdown": self.max_drawdown,
-            "circuit_breaker_active": self.circuit_breaker_active
-        }
-        try:
-            with open(self.state_file, "w") as f:
-                json.dump(state, f)
-        except Exception as e:
-            print(f"Error saving agent state: {e}")
 
     def check_risk(self, trade_amount: float, total_wallet_value: float) -> bool:
         """Checks if a trade violates risk management parameters (e.g., size > 5% of wallet)."""
@@ -68,12 +41,17 @@ class ActorAgent:
 
 
     async def evaluate_exits(self, current_price: float, l2_book: dict = None):
+        if price is None or not isinstance(price, (int, float)):
+            return
+
         """Autonomously decides when to close trades based on profit targets, stop loss, or LLM analysis."""
         trades_to_close = []
         positions = list(self.open_positions.items())
 
         async with aiohttp.ClientSession() as session:
             ollama_url = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
+            if not ollama_url.startswith("http"):
+                ollama_url = f"http://{ollama_url}"
             ollama_model = os.environ.get("OLLAMA_MODEL", "deepseek-r1:8b")
             groq_key = os.environ.get("GROQ_API_KEY")
 
@@ -144,6 +122,10 @@ class ActorAgent:
         Returns:
             dict: Trade execution result details.
         """
+        if price is None or not isinstance(price, (int, float)):
+            return {"status": "error", "reason": "Invalid price data"}
+        if l2_book is not None and not isinstance(l2_book, dict):
+            return {"status": "error", "reason": "Invalid l2_book data"}
         if self.circuit_breaker_active:
              return {"status": "rejected", "reason": "Circuit Breaker Active"}
 
@@ -185,7 +167,7 @@ class ActorAgent:
             total_tokens_bought = 0.0
             vwap_sum = 0.0
 
-            for ask_price, ask_vol in l2_book["asks"]:
+            for ask_price, ask_vol in l2_book["asks"][:10]:
                 if remaining_usd <= 0:
                     break
                 available_usd_at_level = ask_price * ask_vol
@@ -259,7 +241,7 @@ class ActorAgent:
             remaining_tokens = trade["tokens"]
             total_usd_received = 0.0
 
-            for bid_price, bid_vol in l2_book["bids"]:
+            for bid_price, bid_vol in l2_book["bids"][:10]:
                 if remaining_tokens <= 0:
                     break
                 tokens_to_take = min(remaining_tokens, bid_vol)
@@ -301,34 +283,15 @@ class ActorAgent:
 
     def update_mdd(self, current_wallet_value: float):
         """Updates the maximum drawdown metric."""
-        state_changed = False
         if current_wallet_value > self.peak_wallet:
             self.peak_wallet = current_wallet_value
-            state_changed = True
         drawdown = (self.peak_wallet - current_wallet_value) / self.peak_wallet
         if drawdown > self.max_drawdown:
             self.max_drawdown = drawdown
-            state_changed = True
 
         # Senior Reliability: Circuit Breaker Logic
-        if self.max_drawdown >= 0.15 and not self.circuit_breaker_active:
+        if self.max_drawdown >= 0.15:
             self.circuit_breaker_active = True
-            state_changed = True
-
-        if state_changed:
-            self._save_state()
-
-    def reset(self):
-        """Resets the agent's state to initial values."""
-        self.balance = self.initial_balance
-        self.peak_wallet = self.initial_balance
-        self.max_drawdown = 0.0
-        self.circuit_breaker_active = False
-        self.open_positions.clear()
-        self.mock_trades.clear()
-        self.wins = 0
-        self.losses = 0
-        self._save_state()
 
     def get_stats(self, current_price: float = None) -> dict:
         """
