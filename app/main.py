@@ -172,11 +172,18 @@ async def broadcast_state_task():
             history = actor_agent.mock_trades[-20:] # Last 20 closed
 
             shared_agent_state = {
-                "stats": stats,
-                "trades": {
-                    "active": active,
-                    "history": history
-                }
+                "ollama": {
+                    "stats": stats,
+                    "trades": {
+                        "active": active,
+                        "history": history
+                    }
+                },
+                "gemini": {
+                    "db_size": research_agent.client.get_collection(name="market_memory").count() if research_agent.client else 0,
+                    "recent_snapshots": research_agent.get_recent_snapshots() if hasattr(research_agent, "get_recent_snapshots") else []
+                },
+                "price": latest_market_state.get("price")
             }
 
             if active_state_connections:

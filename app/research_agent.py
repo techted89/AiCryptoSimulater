@@ -222,3 +222,23 @@ if __name__ == "__main__":
     agent.update_snapshot_success(doc_id, True)
     conf = agent.analyze_current_state("BTC", 64500, 26)
     print(f"Confidence score: {conf}")
+    def get_recent_snapshots(self, limit=10):
+        try:
+            results = self.collection.get(limit=limit)
+            snapshots = []
+            if results and results.get("metadatas"):
+                for meta in results["metadatas"]:
+                    snapshots.append({
+                        "timestamp": meta.get("timestamp", 0),
+                        "success": str(meta.get("success", "None")),
+                        "price": meta.get("price", 0.0),
+                        "rsi": meta.get("rsi", 0.0),
+                        "macd": meta.get("macd", 0.0),
+                        "news": meta.get("news", "Neutral")
+                    })
+                # Sort descending by timestamp
+                snapshots.sort(key=lambda x: x["timestamp"], reverse=True)
+            return snapshots
+        except Exception as e:
+            print(f"Error getting recent snapshots: {e}")
+            return []
