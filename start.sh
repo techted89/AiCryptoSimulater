@@ -56,7 +56,7 @@ BACKEND_PID=$!
 PIDS+=("$BACKEND_PID")
 
 echo "Starting Data Ingestor..."
-PYTHONPATH=. python app/ingestor.py > ingestor.log 2>&1 &
+python3 app/ingestor.py > ingestor.log 2>&1 &
 INGESTOR_PID=$!
 PIDS+=("$INGESTOR_PID")
 
