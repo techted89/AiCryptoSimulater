@@ -45,6 +45,8 @@ from contextlib import asynccontextmanager
 
 # To calculate live stats, we need the most recent price
 latest_market_state = {"price": 65000.0, "rsi": 50.0}
+active_price_connections: list[WebSocket] = []
+
 
 persistent_tasks = set()
 
@@ -55,6 +57,28 @@ async def background_redis_listener():
     try:
         async for message in pubsub.listen():
             if message["type"] == "message":
+                # Throttle the updates broadcast
+                global _last_broadcast_time
+                try:
+                    _last_broadcast_time
+                except NameError:
+                    _last_broadcast_time = 0.0
+
+                current_time = time.time()
+                throttle_interval = 0.5
+
+                if current_time - _last_broadcast_time >= throttle_interval:
+                    _last_broadcast_time = current_time
+                    raw_data = message["data"].decode("utf-8")
+                    disconnected = []
+                    for ws in active_price_connections:
+                        try:
+                            await ws.send_text(raw_data)
+                        except Exception:
+                            disconnected.append(ws)
+                    for ws in disconnected:
+                        active_price_connections.remove(ws)
+
                 data = json.loads(message["data"].decode("utf-8"))
                 latest_market_state["price"] = data.get("price", 65000.0)
                 latest_market_state["rsi"] = data.get("rsi", 50.0)
@@ -110,51 +134,29 @@ async def background_redis_listener():
 # -----------------
 # WebSocket Endpoint
 # -----------------
+
 @app.websocket("/ws/prices")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     WEBSOCKET_CONNECTIONS.inc()
-
-    # Connect to Redis
-    r = get_redis_client()
-    pubsub = r.pubsub()
-    await pubsub.subscribe("crypto_prices")
-
-    last_send_time = 0.0
-    throttle_interval = 0.5  # Only send updates every 500ms
-
+    active_price_connections.append(websocket)
     logger.info("Client connected to /ws/prices")
+
     try:
-        async for message in pubsub.listen():
-            if message["type"] == "message":
-                current_time = time.time()
-
-                # Throttle the updates
-                if current_time - last_send_time >= throttle_interval:
-                    data = message["data"].decode("utf-8")
-
-                    try:
-                        await websocket.send_text(data)
-                        last_send_time = current_time
-                    except WebSocketDisconnect:
-                        logger.info("Client disconnected.")
-                        break
-                    except Exception as e:
-                        logger.warning(f"Error sending message: {e}")
-                        break
-
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        logger.info("Client disconnected from /ws/prices.")
     except Exception as e:
         logger.exception(f"WebSocket Error: {e}")
     finally:
+        if websocket in active_price_connections:
+            active_price_connections.remove(websocket)
         WEBSOCKET_CONNECTIONS.dec()
-        await pubsub.unsubscribe("crypto_prices")
-        await r.close()
         try:
             await websocket.close()
         except Exception:
             pass
-
-
 
 # -----------------
 # State WebSocket Endpoint
