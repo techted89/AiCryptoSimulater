@@ -1,3 +1,9 @@
+import sys
+from unittest.mock import MagicMock
+mock_chromadb = MagicMock()
+sys.modules["chromadb"] = mock_chromadb
+sys.modules["chromadb.config"] = MagicMock()
+
 import pytest
 import asyncio
 import json

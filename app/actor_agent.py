@@ -104,7 +104,19 @@ class ActorAgent:
             await self.close_trade(trade_id, current_price, l2_book)
 
     async def execute_trade(self, symbol: str, price: float, confidence_score: float, l2_book: dict = None, total_wallet_value: float = None) -> dict:
-        """Executes a mock trade with latency simulation, L2-based slippage, and fees."""
+        """
+        Executes a mock trade with latency simulation, L2-based slippage, and fees.
+
+        Args:
+            symbol (str): The trading pair symbol.
+            price (float): The current market price.
+            confidence_score (float): AI confidence score (0.0 to 1.0) determining entry.
+            l2_book (dict, optional): Level 2 order book data for slippage calculation.
+            total_wallet_value (float, optional): Total wallet value used for risk assessment.
+
+        Returns:
+            dict: Trade execution result details.
+        """
         if self.circuit_breaker_active:
              return {"status": "rejected", "reason": "Circuit Breaker Active"}
 
@@ -192,7 +204,17 @@ class ActorAgent:
         return trade_record
 
     async def close_trade(self, trade_id: str, current_price: float, l2_book: dict = None) -> dict:
-        """Closes an open mock trade with latency, L2 slippage, and fees."""
+        """
+        Closes an open mock trade with latency, L2 slippage, and fees.
+
+        Args:
+            trade_id (str): The unique identifier of the open position.
+            current_price (float): The current market price for exit.
+            l2_book (dict, optional): Level 2 order book data for slippage calculation.
+
+        Returns:
+            dict: Trade exit result details.
+        """
         if trade_id not in self.open_positions:
             return {"status": "error", "reason": "Trade not found"}
 
@@ -263,7 +285,15 @@ class ActorAgent:
             self.circuit_breaker_active = True
 
     def get_stats(self, current_price: float = None) -> dict:
-        """Returns mock agent statistics including active PnL."""
+        """
+        Returns mock agent statistics including active PnL.
+
+        Args:
+            current_price (float, optional): Used to calculate floating PnL on active positions.
+
+        Returns:
+            dict: Statistical metrics summarizing wallet performance and risk.
+        """
         active_value = 0.0
         active_pnl = 0.0
 

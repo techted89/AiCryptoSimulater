@@ -4,6 +4,7 @@ import json
 import random
 import time
 import redis.asyncio as redis
+from app.utils.redis import get_redis_client
 import ccxt.pro as ccxt
 
 SYMBOL = 'BTC/USDT'
@@ -118,7 +119,7 @@ async def publish_data(r):
 
 async def simulate_data_ingestion():
     # Connect to the local Redis instance
-    r = redis.Redis(host=os.environ.get('REDIS_HOST', 'localhost'), port=6379, db=0)
+    r = get_redis_client()
 
     exchange = ccxt.binanceus()
 

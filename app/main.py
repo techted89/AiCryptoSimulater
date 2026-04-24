@@ -3,6 +3,9 @@ import json
 from fastapi import HTTPException, Security
 from fastapi.security import APIKeyHeader
 import os
+import logging
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
 import time
 import random
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
@@ -11,6 +14,7 @@ from fastapi.responses import PlainTextResponse
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 import redis.asyncio as redis
+from app.utils.redis import get_redis_client
 from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST
 from app.actor_agent import ActorAgent
 from app.research_agent import ResearchAgent
@@ -45,7 +49,7 @@ latest_market_state = {"price": 65000.0, "rsi": 50.0}
 persistent_tasks = set()
 
 async def background_redis_listener():
-    r = redis.Redis(host=os.environ.get('REDIS_HOST', 'localhost'), port=6379, db=0)
+    r = get_redis_client()
     pubsub = r.pubsub()
     await pubsub.subscribe("crypto_prices")
     try:
@@ -88,18 +92,16 @@ async def background_redis_listener():
                     )
                     trade_res = await actor_agent.execute_trade("BTC", latest_market_state["price"], conf, l2_book)
                     if trade_res.get("status") == "skipped":
-                        print(f"Trade skipped: {trade_res.get('reason')}")
+                        logger.info(f"Trade skipped: {trade_res.get('reason')}")
                     elif trade_res.get("status") == "open":
-                        print(f"Trade opened: {trade_res}")
+                        logger.info(f"Trade opened: {trade_res}")
                     elif trade_res.get("status") == "rejected":
-                        print(f"Trade rejected: {trade_res.get('reason')}")
+                        logger.info(f"Trade rejected: {trade_res.get('reason')}")
                     else:
-                        print(f"Trade execution returned unknown status: {trade_res}")
+                        logger.info(f"Trade execution returned unknown status: {trade_res}")
 
     except Exception as e:
-        import traceback
-        print(f"Background Redis Error: {e}")
-        traceback.print_exc()
+        logger.exception(f"Background Redis Error: {e}")
     finally:
         await pubsub.unsubscribe("crypto_prices")
         await r.close()
@@ -114,14 +116,14 @@ async def websocket_endpoint(websocket: WebSocket):
     WEBSOCKET_CONNECTIONS.inc()
 
     # Connect to Redis
-    r = redis.Redis(host=os.environ.get('REDIS_HOST', 'localhost'), port=6379, db=0)
+    r = get_redis_client()
     pubsub = r.pubsub()
     await pubsub.subscribe("crypto_prices")
 
     last_send_time = 0.0
     throttle_interval = 0.5  # Only send updates every 500ms
 
-    print("Client connected to /ws/prices")
+    logger.info("Client connected to /ws/prices")
     try:
         async for message in pubsub.listen():
             if message["type"] == "message":
@@ -135,14 +137,14 @@ async def websocket_endpoint(websocket: WebSocket):
                         await websocket.send_text(data)
                         last_send_time = current_time
                     except WebSocketDisconnect:
-                        print("Client disconnected.")
+                        logger.info("Client disconnected.")
                         break
                     except Exception as e:
-                        print(f"Error sending message: {e}")
+                        logger.warning(f"Error sending message: {e}")
                         break
 
     except Exception as e:
-        print(f"WebSocket Error: {e}")
+        logger.exception(f"WebSocket Error: {e}")
     finally:
         WEBSOCKET_CONNECTIONS.dec()
         await pubsub.unsubscribe("crypto_prices")
@@ -172,11 +174,18 @@ async def broadcast_state_task():
             history = actor_agent.mock_trades[-20:] # Last 20 closed
 
             shared_agent_state = {
-                "stats": stats,
-                "trades": {
-                    "active": active,
-                    "history": history
-                }
+                "ollama": {
+                    "stats": stats,
+                    "trades": {
+                        "active": active,
+                        "history": history
+                    }
+                },
+                "gemini": {
+                    "db_size": await run_in_threadpool(lambda: research_agent.collection.count() if hasattr(research_agent, "collection") and research_agent.collection else 0),
+                    "recent_snapshots": await run_in_threadpool(lambda: research_agent.get_recent_snapshots() if hasattr(research_agent, "get_recent_snapshots") else [])
+                },
+                "price": latest_market_state.get("price")
             }
 
             if active_state_connections:
@@ -193,7 +202,7 @@ async def broadcast_state_task():
 
             await asyncio.sleep(1.0) # Update rate
         except Exception as e:
-            print(f"Broadcast State Error: {e}")
+            logger.exception(f"Broadcast State Error: {e}")
             await asyncio.sleep(1.0)
 
 @app.on_event("startup")
@@ -211,7 +220,7 @@ async def state_websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     WEBSOCKET_CONNECTIONS.inc()
     active_state_connections.append(websocket)
-    print("Client connected to /ws/state")
+    logger.info("Client connected to /ws/state")
 
     # Send current state immediately upon connection if available
     if shared_agent_state:
@@ -226,9 +235,9 @@ async def state_websocket_endpoint(websocket: WebSocket):
             await websocket.receive_text()
 
     except WebSocketDisconnect:
-        print("Client disconnected from /ws/state")
+        logger.info("Client disconnected from /ws/state")
     except Exception as e:
-        print(f"State WebSocket Error: {e}")
+        logger.exception(f"State WebSocket Error: {e}")
     finally:
         if websocket in active_state_connections:
             active_state_connections.remove(websocket)
@@ -302,14 +311,7 @@ class ControlRequest(BaseModel):
 @app.post("/api/control")
 async def admin_control(req: ControlRequest):
     if req.action == "reset_wallet":
-        actor_agent.balance = 10000.0
-        actor_agent.mock_trades = []
-        actor_agent.open_positions = {}
-        actor_agent.wins = 0
-        actor_agent.losses = 0
-        actor_agent.peak_wallet = 10000.0
-        actor_agent.max_drawdown = 0.0
-        actor_agent.circuit_breaker_active = False
+        actor_agent.reset()
         research_agent.thought_log = []
         return {"status": "success", "message": "Wallet and Circuit Breaker reset"}
     elif req.action == "trigger_trade":

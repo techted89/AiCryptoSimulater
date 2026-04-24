@@ -15,7 +15,7 @@ interface Trade {
 
 interface OllamaExecutionPanelProps {
   data: {
-    stats: {
+    stats?: {
         balance: number;
         wallet_value: number;
         floating_pnl: number;
@@ -23,9 +23,9 @@ interface OllamaExecutionPanelProps {
         max_drawdown: number;
         circuit_breaker_active: boolean;
     };
-    trades: {
-        active: Trade[];
-        history: Trade[];
+    trades?: {
+        active?: Trade[];
+        history?: Trade[];
     };
     l2_book?: {
         bids: number[][];
@@ -120,7 +120,13 @@ export default function OllamaExecutionPanel({ data }: OllamaExecutionPanelProps
 
                 {/* Open Orders / Positions Tab */}
                 <div className="flex-1 bg-surface-container-lowest rounded-lg border border-outline-variant/10 p-3 flex flex-col overflow-hidden">
-                    <h3 className="text-[10px] uppercase tracking-widest text-outline font-bold mb-2 pb-2 border-b border-outline-variant/10">Active Positions ({(data.trades?.active?.length || 0)})</h3>
+                    <div className="flex justify-between items-center mb-2 pb-2 border-b border-outline-variant/10">
+                        <h3 className="text-[10px] uppercase tracking-widest text-outline font-bold">Active Positions ({(data.trades?.active?.length || 0)})</h3>
+                        <div className="text-[9px] font-mono text-outline">
+                            Wallet: <span className="text-primary-fixed-dim">${data.stats?.wallet_value?.toLocaleString(undefined, {minimumFractionDigits: 2}) ?? '---'}</span> |
+                            PnL: <span className={data.stats?.floating_pnl != null && data.stats.floating_pnl >= 0 ? 'text-secondary' : 'text-error'}>{data.stats?.floating_pnl != null && data.stats.floating_pnl >= 0 ? '+' : ''}{data.stats?.floating_pnl?.toFixed(2) ?? '0.00'}</span>
+                        </div>
+                    </div>
                     <div className="flex-1 overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-slate-700">
                         {(data.trades?.active?.length || 0) === 0 ? (
                             <div className="text-[10px] text-outline/50 text-center py-4 italic">No open trades</div>
@@ -152,6 +158,33 @@ export default function OllamaExecutionPanel({ data }: OllamaExecutionPanelProps
                                             <div className="mt-1 flex justify-between text-[9px]">
                                                 <span className="text-primary-fixed-dim">Conf: {(trade.confidence * 100).toFixed(1)}%</span>
                                                 <span className="text-secondary animate-pulse">ACTIVE</span>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>
+
+                    <h3 className="text-[10px] uppercase tracking-widest text-outline font-bold mt-4 mb-2 pb-2 border-b border-outline-variant/10">Recent History ({(data.trades?.history?.length || 0)})</h3>
+                    <div className="shrink-0 h-[100px] overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-slate-700">
+                        {(data.trades?.history?.length || 0) === 0 ? (
+                            <div className="text-[10px] text-outline/50 text-center py-4 italic">No recent trades</div>
+                        ) : (
+                            <div className="space-y-2">
+                                {(data.trades?.history || []).slice().reverse().map((trade) => {
+                                    const isWin = trade.pnl != null && trade.pnl >= 0;
+                                    return (
+                                        <div key={trade.id} className="bg-surface-container-lowest p-2 rounded border border-outline-variant/5 text-[9px] font-mono">
+                                            <div className="flex justify-between mb-1">
+                                                <span className="font-bold text-on-surface-variant">{trade.symbol}</span>
+                                                <span className={`font-bold ${isWin ? 'text-secondary' : 'text-error'}`}>
+                                                    {isWin ? '+' : ''}{trade.pnl != null ? trade.pnl.toFixed(2) : '---'}
+                                                </span>
+                                            </div>
+                                            <div className="flex justify-between text-outline/70">
+                                                <span>Entry: ${trade.entry_price.toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
+                                                <span>Size: ${trade.amount_usd.toFixed(2)}</span>
                                             </div>
                                         </div>
                                     );

@@ -1,12 +1,16 @@
 import asyncio
 import json
-import redis.asyncio as redis
+import redis
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from app.utils.redis import get_redis_client.asyncio as redis
 import time
 import argparse
 
 async def record(duration_seconds: int, output_file: str):
     print(f"Starting to record Redis 'crypto_prices' channel for {duration_seconds} seconds...")
-    r = redis.Redis(host='localhost', port=6379, db=0)
+    r = get_redis_client()
     pubsub = r.pubsub()
     await pubsub.subscribe("crypto_prices")
 
@@ -39,7 +43,7 @@ async def replay(input_file: str, speed_multiplier: float):
         print("No events found.")
         return
 
-    r = redis.Redis(host='localhost', port=6379, db=0)
+    r = get_redis_client()
 
     print(f"Replaying {len(events)} ticks...")
     try:
