@@ -60,6 +60,7 @@ python3 app/ingestor.py > ingestor.log 2>&1 &
 INGESTOR_PID=$!
 PIDS+=("$INGESTOR_PID")
 
+export NEXT_TELEMETRY_DISABLED=1
 echo "Starting Frontend..."
 (cd frontend && npm run dev) > frontend.log 2>&1 &
 FRONTEND_PID=$!
