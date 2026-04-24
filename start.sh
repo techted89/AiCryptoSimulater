@@ -86,7 +86,7 @@ wait_for_url() {
     local RETRIES=0
 
     echo -n "Waiting for $SERVICE_NAME to be ready..."
-    while ! curl -fsS "$URL" > /dev/null 2>&1; do
+    while ! curl -fsS --connect-timeout 2 --max-time 5 "$URL" > /dev/null 2>&1; do
         if [ $RETRIES -eq $MAX_RETRIES ]; then
             echo " Failed!"
             return 1
