@@ -40,13 +40,10 @@ class ActorAgent:
             pos["funding_fees_paid"] += funding_fee
 
 
-    async def evaluate_exits(self, current_price: float, l2_book: dict = None):
-        if price is None or not isinstance(price, (int, float)):
-            return
-
+    async def evaluate_exits(self, price: float, l2_book: dict = None):
         """Autonomously decides when to close trades based on profit targets, stop loss, or LLM analysis."""
         if price is None or not isinstance(price, (int, float)):
-            return
+            return []
         trades_to_close = []
         positions = list(self.open_positions.items())
 
@@ -227,7 +224,7 @@ class ActorAgent:
 
         Args:
             trade_id (str): The unique identifier of the open position.
-            current_price (float): The current market price for exit.
+            price (float): The current market price for exit.
             l2_book (dict, optional): Level 2 order book data for slippage calculation.
 
         Returns:
@@ -307,7 +304,7 @@ class ActorAgent:
         Returns mock agent statistics including active PnL.
 
         Args:
-            current_price (float, optional): Used to calculate floating PnL on active positions.
+            price (float, optional): Used to calculate floating PnL on active positions.
 
         Returns:
             dict: Statistical metrics summarizing wallet performance and risk.

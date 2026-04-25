@@ -112,6 +112,14 @@ async def background_redis_listener():
                     if trade_res.get("status") == "open":
                         trade_success_status = "pending"
 
+                    # Compute actual l2_imbalance from L2 book for accurate memory tracking
+                    calc_l2_imbalance = 0.0
+                    if l2_book:
+                        bids = sum(b[1] for b in l2_book.get("bids", [])[:10])
+                        asks = sum(a[1] for a in l2_book.get("asks", [])[:10])
+                        if bids + asks > 0:
+                            calc_l2_imbalance = (bids - asks) / (bids + asks)
+
                     # Offload to threadpool to prevent blocking the async loop
                     doc_id = await run_in_threadpool(
                         research_agent.record_snapshot,
@@ -121,7 +129,7 @@ async def background_redis_listener():
                         dxy,
                         sp500,
                         news,
-                        0.0, # l2_imbalance placeholder for now
+                        calc_l2_imbalance,
                         macd,
                         trade_success_status
                     )
