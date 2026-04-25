@@ -13,7 +13,7 @@ echo "========================================="
 # Ensure tmux is installed
 if ! command -v tmux &> /dev/null; then
     echo "Error: tmux is not installed. Please install it (e.g., sudo apt install tmux)."
-    kill -INT $$
+    exit 1
 fi
 
 # Kill existing session if it exists
