@@ -40,7 +40,10 @@ class ActorAgent:
             pos["funding_fees_paid"] += funding_fee
 
 
-    async def evaluate_exits(self, price: float, l2_book: dict = None):
+    async def evaluate_exits(self, current_price: float, l2_book: dict = None):
+        if price is None or not isinstance(price, (int, float)):
+            return
+
         """Autonomously decides when to close trades based on profit targets, stop loss, or LLM analysis."""
         if price is None or not isinstance(price, (int, float)):
             return
