@@ -40,19 +40,23 @@ class ActorAgent:
             pos["funding_fees_paid"] += funding_fee
 
 
-    async def evaluate_exits(self, current_price: float, l2_book: dict = None):
+    async def evaluate_exits(self, price: float, l2_book: dict = None):
         """Autonomously decides when to close trades based on profit targets, stop loss, or LLM analysis."""
+        if price is None or not isinstance(price, (int, float)):
+            return
         trades_to_close = []
         positions = list(self.open_positions.items())
 
         async with aiohttp.ClientSession() as session:
             ollama_url = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
+            if not ollama_url.startswith("http"):
+                ollama_url = f"http://{ollama_url}"
             ollama_model = os.environ.get("OLLAMA_MODEL", "deepseek-r1:8b")
             groq_key = os.environ.get("GROQ_API_KEY")
 
             for trade_id, trade in positions:
                 entry_price = trade["entry_price"]
-                pnl_pct = (current_price - entry_price) / entry_price
+                pnl_pct = (price - entry_price) / entry_price
 
                 # Default algorithmic fallback
                 should_close = False
@@ -61,7 +65,7 @@ class ActorAgent:
 
                 # Hybrid Local/Cloud LLM Evaluation only if neutral band
                 if not should_close and -0.01 <= pnl_pct <= 0.02:
-                    prompt = f"Trade ID: {trade_id}\nSymbol: {trade['symbol']}\nEntry Price: {entry_price}\nCurrent Price: {current_price}\nPnL: {pnl_pct*100:.2f}%\n\nShould I CLOSE this trade or HOLD? Respond strictly with 'CLOSE' or 'HOLD'."
+                    prompt = f"Trade ID: {trade_id}\nSymbol: {trade['symbol']}\nEntry Price: {entry_price}\nCurrent Price: {price}\nPnL: {pnl_pct*100:.2f}%\n\nShould I CLOSE this trade or HOLD? Respond strictly with 'CLOSE' or 'HOLD'."
 
                     try:
                         async with session.post(
@@ -100,8 +104,15 @@ class ActorAgent:
                 if should_close:
                     trades_to_close.append(trade_id)
 
+        closed_results = []
         for trade_id in trades_to_close:
-            await self.close_trade(trade_id, current_price, l2_book)
+            result = await self.close_trade(trade_id, price, l2_book)
+            if result.get("status") == "closed":
+                 # Inherit memory_doc_id from the original trade record before it was popped
+                 # Actually, it's already preserved in the result dict returned by close_trade
+                 closed_results.append(result)
+        return closed_results
+
 
     async def execute_trade(self, symbol: str, price: float, confidence_score: float, l2_book: dict = None, total_wallet_value: float = None) -> dict:
         """
@@ -117,6 +128,10 @@ class ActorAgent:
         Returns:
             dict: Trade execution result details.
         """
+        if price is None or not isinstance(price, (int, float)):
+            return {"status": "error", "reason": "Invalid price data"}
+        if l2_book is not None and not isinstance(l2_book, dict):
+            return {"status": "error", "reason": "Invalid l2_book data"}
         if self.circuit_breaker_active:
              return {"status": "rejected", "reason": "Circuit Breaker Active"}
 
@@ -158,7 +173,7 @@ class ActorAgent:
             total_tokens_bought = 0.0
             vwap_sum = 0.0
 
-            for ask_price, ask_vol in l2_book["asks"]:
+            for ask_price, ask_vol in l2_book["asks"][:10]:
                 if remaining_usd <= 0:
                     break
                 available_usd_at_level = ask_price * ask_vol
@@ -203,7 +218,7 @@ class ActorAgent:
         self.open_positions[trade_id] = trade_record
         return trade_record
 
-    async def close_trade(self, trade_id: str, current_price: float, l2_book: dict = None) -> dict:
+    async def close_trade(self, trade_id: str, price: float, l2_book: dict = None) -> dict:
         """
         Closes an open mock trade with latency, L2 slippage, and fees.
 
@@ -232,7 +247,7 @@ class ActorAgent:
             remaining_tokens = trade["tokens"]
             total_usd_received = 0.0
 
-            for bid_price, bid_vol in l2_book["bids"]:
+            for bid_price, bid_vol in l2_book["bids"][:10]:
                 if remaining_tokens <= 0:
                     break
                 tokens_to_take = min(remaining_tokens, bid_vol)
@@ -243,13 +258,13 @@ class ActorAgent:
 
             if trade["tokens"] > 0:
                 exit_price = total_usd_received / trade["tokens"]
-                slippage_pct = (current_price - exit_price) / current_price
+                slippage_pct = (price - exit_price) / price
             else:
                 slippage_pct = random.uniform(0.0001, 0.0005)
-                exit_price = current_price * (1 - slippage_pct)
+                exit_price = price * (1 - slippage_pct)
         else:
             slippage_pct = random.uniform(0.0001, 0.0005)
-            exit_price = current_price * (1 - slippage_pct)
+            exit_price = price * (1 - slippage_pct)
 
         gross_exit_value = trade["tokens"] * exit_price
         exit_fee = gross_exit_value * 0.001 # 0.1% fee
@@ -284,7 +299,7 @@ class ActorAgent:
         if self.max_drawdown >= 0.15:
             self.circuit_breaker_active = True
 
-    def get_stats(self, current_price: float = None) -> dict:
+    def get_stats(self, price: float = None) -> dict:
         """
         Returns mock agent statistics including active PnL.
 
@@ -297,9 +312,9 @@ class ActorAgent:
         active_value = 0.0
         active_pnl = 0.0
 
-        if current_price is not None:
+        if price is not None:
             for pos in self.open_positions.values():
-                val = pos["tokens"] * current_price
+                val = pos["tokens"] * price
                 active_value += val
                 active_pnl += (val - pos["amount_usd"])
 

@@ -67,7 +67,12 @@ async def background_redis_listener():
                 macd = data.get("macd", 0.0)
 
                 # Evaluate exits autonomously
-                await actor_agent.evaluate_exits(latest_market_state["price"], l2_book)
+                closed_trades = await actor_agent.evaluate_exits(latest_market_state["price"], l2_book)
+                if closed_trades:
+                     for ct in closed_trades:
+                         if "memory_doc_id" in ct:
+                             is_success = ct.get("pnl", 0) > 0
+                             await run_in_threadpool(research_agent.update_snapshot_success, ct["memory_doc_id"], is_success)
 
                 # Analyze and execute entries autonomously
                 # Throttle entries
@@ -99,6 +104,32 @@ async def background_redis_listener():
                         logger.info(f"Trade rejected: {trade_res.get('reason')}")
                     else:
                         logger.info(f"Trade execution returned unknown status: {trade_res}")
+
+                    # Fix: Ensure market state snapshots are recorded into ChromaDB memory
+                    # after analysis to resolve "Vector DB Size of 0" and build historical context.
+                    # We record success=True dynamically later, but default to 'pending'
+                    trade_success_status = None
+                    if trade_res.get("status") == "open":
+                        trade_success_status = "pending"
+
+                    # Offload to threadpool to prevent blocking the async loop
+                    doc_id = await run_in_threadpool(
+                        research_agent.record_snapshot,
+                        "BTC",
+                        latest_market_state["price"],
+                        latest_market_state["rsi"],
+                        dxy,
+                        sp500,
+                        news,
+                        0.0, # l2_imbalance placeholder for now
+                        macd,
+                        trade_success_status
+                    )
+
+                    if trade_res.get("status") == "open" and "id" in trade_res:
+                        # Link trade to memory doc_id for later success tracking (Optional enhancement)
+                        actor_agent.open_positions[trade_res["id"]]["memory_doc_id"] = doc_id
+
 
     except Exception as e:
         logger.exception(f"Background Redis Error: {e}")
@@ -169,7 +200,7 @@ async def broadcast_state_task():
         try:
             # Calculate state once every tick regardless of active connections
             # to ensure first clients receive an up-to-date state instantly.
-            stats = actor_agent.get_stats(current_price=latest_market_state["price"])
+            stats = actor_agent.get_stats(price=latest_market_state["price"])
             active = list(actor_agent.open_positions.values())
             history = actor_agent.mock_trades[-20:] # Last 20 closed
 
@@ -258,7 +289,7 @@ async def metrics():
 @app.get("/api/stats")
 async def get_stats():
     # Pass the current price so floating PnL is accurate
-    return actor_agent.get_stats(current_price=latest_market_state["price"])
+    return actor_agent.get_stats(price=latest_market_state["price"])
 
 @app.get("/api/trades")
 async def get_trades():
@@ -333,8 +364,15 @@ async def admin_control(req: ControlRequest):
         # Manually close the oldest open trade
         if actor_agent.open_positions:
             trade_id = list(actor_agent.open_positions.keys())[0]
+            trade = actor_agent.open_positions[trade_id]
             with TRADE_EXECUTION_LATENCY.time():
                  result = await actor_agent.close_trade(trade_id, latest_market_state["price"])
+
+                 # If the trade was linked to a memory snapshot, update its success state
+                 if "memory_doc_id" in trade:
+                     is_success = result.get("pnl", 0) > 0
+                     await run_in_threadpool(research_agent.update_snapshot_success, trade["memory_doc_id"], is_success)
+
             return {"status": "success", "result": result}
         return {"status": "error", "message": "No open trades"}
 
