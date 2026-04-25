@@ -34,7 +34,7 @@ echo "4. Installing Frontend Node Dependencies..."
 cd frontend
 # Clean install to avoid missing .bin symlinks
 rm -rf node_modules
-# Use --no-audit to prevent misleading vulnerability warnings that prompt destructive --force fixes
+# Use --legacy-peer-deps to ignore conflicting peer dependencies caused by Next 15 / React 19 upgrades.
 npm install --legacy-peer-deps
 
 echo "========================================="

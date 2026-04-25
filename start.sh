@@ -1,41 +1,44 @@
 #!/bin/bash
 
-# Setup trap to kill children on exit
-PIDS=()
-
 # ==============================================================================
-# cleanup()
-#
-# Helper function to gracefully terminate all child background processes and
-# explicit core service names when the script exits or is interrupted.
+# AI Crypto Trading Simulator - Tmux Service Runner
 # ==============================================================================
-cleanup() {
-    echo "Stopping all processes..."
-    for PID in "${PIDS[@]}"; do
-        if kill -0 "$PID" 2>/dev/null; then
-            kill "$PID" || true
-        fi
-    done
-    pkill -f "uvicorn app.main:app" || true
-    pkill -f "next" || true
-    pkill -f "app/ingestor.py" || true
-}
-trap cleanup SIGINT SIGTERM EXIT
 
-echo "Cleaning up lingering ports before starting..."
-lsof -t -i :3000 | xargs -r kill -9 || true
-lsof -t -i :8000 | xargs -r kill -9 || true
-
+SESSION_NAME="aicrypto"
 
 echo "========================================="
 echo " Starting AI Crypto Trading Simulator    "
 echo "========================================="
 
+# Ensure tmux is installed
+if ! command -v tmux &> /dev/null; then
+    echo "Error: tmux is not installed. Please install it (e.g., sudo apt install tmux)."
+    kill -INT $$
+fi
+
+# Kill existing session if it exists
+tmux kill-session -t $SESSION_NAME 2>/dev/null || true
+
+echo "Cleaning up lingering ports before starting..."
+# 1. Send SIGTERM gracefully first
+lsof -t -i :3000 -i :3001 -i :3002 -i :8000 | xargs -r kill || true
+pkill -u "$USER" -f "uvicorn app.main:app" || true
+pkill -u "$USER" -f "frontend.*next" || true
+pkill -u "$USER" -f "app/ingestor.py" || true
+
+sleep 1
+
+# 2. Escalate to SIGKILL for any stubborn remaining processes
+lsof -t -i :3000 -i :3001 -i :3002 -i :8000 | xargs -r kill -9 || true
+pkill -9 -u "$USER" -f "uvicorn app.main:app" || true
+pkill -9 -u "$USER" -f "frontend.*next" || true
+pkill -9 -u "$USER" -f "app/ingestor.py" || true
+
 echo "Checking Redis..."
 if ! redis-cli ping >/dev/null 2>&1; then
     echo "Redis is not running. Attempting to start Redis..."
     sudo service redis-server start || redis-server --daemonize yes || echo "Failed to start Redis"
-    sleep 2 # Give Redis time to start
+    sleep 2
 fi
 
 echo "Setting environment variables..."
@@ -45,41 +48,36 @@ else
     echo "Warning: .env file not found. Falling back to defaults."
 fi
 
-# Activate the virtual environment before running python/uvicorn
-if [ -d "venv" ]; then
-    source venv/bin/activate
-fi
+# ==============================================================================
+# Tmux Session Initialization
+# ==============================================================================
 
-echo "Starting Backend API..."
-uvicorn app.main:app --host 0.0.0.0 --port 8000 > backend.log 2>&1 &
-BACKEND_PID=$!
-PIDS+=("$BACKEND_PID")
+# Create new detached session and capture the root pane ID
+PANE0=$(tmux new-session -d -s $SESSION_NAME -n "Control" -P -F "#{pane_id}")
 
-echo "Starting Data Ingestor..."
-PYTHONPATH=. python app/ingestor.py > ingestor.log 2>&1 &
-INGESTOR_PID=$!
-PIDS+=("$INGESTOR_PID")
+# Window 1, Pane 0: Control & Readiness Checks
+tmux send-keys -t $PANE0 "echo 'Initializing services...'" C-m
 
-export NEXT_TELEMETRY_DISABLED=1
-echo "Starting Frontend..."
-(cd frontend && npm run dev) > frontend.log 2>&1 &
-FRONTEND_PID=$!
-PIDS+=("$FRONTEND_PID")
+# Pane 1: Backend
+PANE1=$(tmux split-window -h -t $PANE0 -P -F "#{pane_id}")
+tmux send-keys -t $PANE1 "source venv/bin/activate 2>/dev/null || true; uvicorn app.main:app --host 0.0.0.0 --port 8000 2>&1 | tee backend.log" C-m
+
+# Pane 2: Data Ingestor
+PANE2=$(tmux split-window -v -t $PANE1 -P -F "#{pane_id}")
+tmux send-keys -t $PANE2 "source venv/bin/activate 2>/dev/null || true; PYTHONPATH=. python app/ingestor.py 2>&1 | tee ingestor.log" C-m
+
+# Pane 3: Frontend
+PANE3=$(tmux split-window -h -t $PANE0 -P -F "#{pane_id}")
+# Escaping run command
+tmux send-keys -t $PANE3 "cd frontend; export NEXT_TELEMETRY_DISABLED=1; npm run dev > ../frontend.log 2>&1" C-m
+
+# Adjust layout to make all panes readable
+tmux select-layout -t $SESSION_NAME tiled
 
 # ==============================================================================
-# wait_for_url()
-#
-# Repeatedly probes a given URL until it returns a successful HTTP status code
-# or reaches a maximum timeout limit.
-#
-# Args:
-#   URL: The HTTP URL to test (e.g., "http://localhost:8000/").
-#   SERVICE_NAME: A friendly name for the service being tested (for logging).
-#
-# Returns:
-#   0 if the URL becomes successfully responsive within the timeout limit.
-#   1 if the maximum number of retries is reached.
+# Health Checks
 # ==============================================================================
+
 wait_for_url() {
     local URL=$1
     local SERVICE_NAME=$2
@@ -100,16 +98,15 @@ wait_for_url() {
     return 0
 }
 
-if ! wait_for_url "http://74.208.167.101:11434" "Ollama Agent"; then
-    echo "Error: Ollama Agent failed to start. The Actor Agent requires Ollama."
-    exit 1
-fi
+# Run health checks directly in the active terminal to inform the user
+echo "Waiting for services to spin up inside Tmux..."
 
 if ! wait_for_url "http://localhost:8000/" "Backend API"; then
     echo "Error: Backend API failed to start."
     echo "--- Backend Logs ---"
     tail -n 50 backend.log
     echo "--------------------"
+    tmux kill-session -t $SESSION_NAME
     exit 1
 fi
 
@@ -118,23 +115,27 @@ if ! wait_for_url "http://localhost:3000/" "Frontend"; then
     echo "--- Frontend Logs ---"
     tail -n 50 frontend.log
     echo "---------------------"
+    tmux kill-session -t $SESSION_NAME
     exit 1
 fi
 
-if kill -0 "$INGESTOR_PID" 2>/dev/null; then
-    echo "Data Ingestor is running."
-else
-    echo "Warning: Data Ingestor process is not running."
-    echo "--- Ingestor Logs ---"
-    tail -n 50 ingestor.log
-    echo "---------------------"
+OLLAMA_URL=${OLLAMA_BASE_URL:-"http://localhost:11434"}
+# Ensure proper HTTP scheme
+if [[ ! "$OLLAMA_URL" =~ ^http ]]; then
+    OLLAMA_URL="http://${OLLAMA_URL}"
+fi
+
+if ! wait_for_url "$OLLAMA_URL" "Ollama Agent"; then
+    echo "Error: Ollama Agent failed to start at $OLLAMA_URL. The Actor Agent requires Ollama."
+    tmux kill-session -t $SESSION_NAME
+    exit 1
 fi
 
 echo "========================================="
-echo " All services are actively running.      "
+echo " All services are actively running in Tmux."
 echo " Frontend: http://localhost:3000         "
 echo " Backend:  http://localhost:8000         "
-echo " Press Ctrl+C to stop.                   "
+echo " "
+echo " Run 'tmux attach -t $SESSION_NAME' to view logs."
+echo " Run 'tmux kill-session -t $SESSION_NAME' to stop."
 echo "========================================="
-
-wait
