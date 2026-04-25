@@ -59,91 +59,62 @@ async def background_redis_listener():
                 latest_market_state["price"] = data.get("price", 65000.0)
                 latest_market_state["rsi"] = data.get("rsi", 50.0)
 
-                # Autonomous Trading Control
-                dxy = data.get("macro", {}).get("dxy", 104.0)
-                sp500 = data.get("macro", {}).get("sp500", 5200.0)
-                news = data.get("news_sentiment", "Neutral")
-                l2_book = data.get("order_book", None)
-                macd = data.get("macd", 0.0)
-
-                # Evaluate exits autonomously
-                closed_trades = await actor_agent.evaluate_exits(latest_market_state["price"], l2_book)
-                if closed_trades:
-                     for ct in closed_trades:
-                         if "memory_doc_id" in ct:
-                             is_success = ct.get("pnl", 0) > 0
-                             await run_in_threadpool(research_agent.update_snapshot_success, ct["memory_doc_id"], is_success)
-
-                # Analyze and execute entries autonomously
-                # Throttle entries
-                global _last_entry_analysis_at
-                try:
-                    _last_entry_analysis_at
-                except NameError:
-                    _last_entry_analysis_at = 0
-
-                COOLDOWN_SECONDS = 10
-                if len(actor_agent.open_positions) < 3 and (time.time() - _last_entry_analysis_at) >= COOLDOWN_SECONDS:
-                    _last_entry_analysis_at = time.time()
-                    conf = await research_agent.analyze_current_state(
-                        "BTC",
-                        latest_market_state["price"],
-                        latest_market_state["rsi"],
-                        dxy,
-                        sp500,
-                        news,
-                        l2_book,
-                        macd
-                    )
-                    trade_res = await actor_agent.execute_trade("BTC", latest_market_state["price"], conf, l2_book)
-                    if trade_res.get("status") == "skipped":
-                        logger.info(f"Trade skipped: {trade_res.get('reason')}")
-                    elif trade_res.get("status") == "open":
-                        logger.info(f"Trade opened: {trade_res}")
-                    elif trade_res.get("status") == "rejected":
-                        logger.info(f"Trade rejected: {trade_res.get('reason')}")
-                    else:
-                        logger.info(f"Trade execution returned unknown status: {trade_res}")
-
-                    # Fix: Ensure market state snapshots are recorded into ChromaDB memory
-                    # after analysis to resolve "Vector DB Size of 0" and build historical context.
-                    # We record success=True dynamically later, but default to 'pending'
-                    trade_success_status = None
-                    if trade_res.get("status") == "open":
-                        trade_success_status = "pending"
-
-                    # Compute actual l2_imbalance from L2 book for accurate memory tracking
-                    calc_l2_imbalance = 0.0
-                    if l2_book:
-                        bids = sum(b[1] for b in l2_book.get("bids", [])[:10])
-                        asks = sum(a[1] for a in l2_book.get("asks", [])[:10])
-                        if bids + asks > 0:
-                            calc_l2_imbalance = (bids - asks) / (bids + asks)
-
-                    # Offload to threadpool to prevent blocking the async loop
-                    doc_id = await run_in_threadpool(
-                        research_agent.record_snapshot,
-                        "BTC",
-                        latest_market_state["price"],
-                        latest_market_state["rsi"],
-                        dxy,
-                        sp500,
-                        news,
-                        calc_l2_imbalance,
-                        macd,
-                        trade_success_status
-                    )
-
-                    if trade_res.get("status") == "open" and "id" in trade_res:
-                        # Link trade to memory doc_id for later success tracking (Optional enhancement)
-                        actor_agent.open_positions[trade_res["id"]]["memory_doc_id"] = doc_id
-
-
+                # Publish the raw data to market_ticks for decoupled agents to consume
+                await r.publish("market_ticks", message["data"])
     except Exception as e:
         logger.exception(f"Background Redis Error: {e}")
     finally:
         await pubsub.unsubscribe("crypto_prices")
         await r.close()
+
+async def watchdog_task():
+    """Automated Health Watchdog."""
+    import subprocess
+    ollama_url = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
+    if not ollama_url.startswith("http"):
+        ollama_url = f"http://{ollama_url}"
+
+    while True:
+        try:
+            # Check Ollama
+            ollama_ok = False
+            try:
+                import aiohttp
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(ollama_url, timeout=2.0) as res:
+                        ollama_ok = res.status == 200
+            except Exception:
+                ollama_ok = False
+
+            # Check Redis
+            r = get_redis_client()
+            redis_ok = await r.ping()
+            await r.close()
+
+            if not ollama_ok or not redis_ok:
+                if not getattr(actor_agent, 'paused', False):
+                    logger.warning("Watchdog: Dependencies offline. Pausing Actor Agent.")
+                    actor_agent.paused = True
+            else:
+                if getattr(actor_agent, 'paused', False):
+                    logger.info("Watchdog: Dependencies restored. Resuming Actor Agent.")
+                    actor_agent.paused = False
+
+        except Exception as e:
+            logger.exception(f"Watchdog Error: {e}")
+
+        await asyncio.sleep(10)
+
+async def maintenance_task():
+    """Periodic ChromaDB pruning and strategy reflection."""
+    while True:
+        await asyncio.sleep(3600) # Run every hour
+        try:
+            await research_agent.prune_old_snapshots()
+            await research_agent.reflect_on_performance()
+        except Exception as e:
+            logger.error(f"Maintenance task error: {e}")
+
 
 
 # -----------------
@@ -246,13 +217,19 @@ async def broadcast_state_task():
 
 @app.on_event("startup")
 async def startup_event():
+    r = get_redis_client()
     task1 = asyncio.create_task(background_redis_listener())
-    persistent_tasks.add(task1)
-    task1.add_done_callback(persistent_tasks.discard)
-
     task2 = asyncio.create_task(broadcast_state_task())
-    persistent_tasks.add(task2)
-    task2.add_done_callback(persistent_tasks.discard)
+    task3 = asyncio.create_task(actor_agent.listen_market_ticks(r))
+    task4 = asyncio.create_task(actor_agent.listen_trade_signals(r))
+    task5 = asyncio.create_task(research_agent.listen_market_ticks(r))
+    task6 = asyncio.create_task(watchdog_task())
+    task7 = asyncio.create_task(maintenance_task())
+
+    for t in [task1, task2, task3, task4, task5, task6, task7]:
+        persistent_tasks.add(t)
+        t.add_done_callback(persistent_tasks.discard)
+
 
 @app.websocket("/ws/state")
 async def state_websocket_endpoint(websocket: WebSocket):

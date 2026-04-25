@@ -182,12 +182,26 @@ class ResearchAgent:
         success_count = 0
         total_resolved = 0
 
+        import datetime
+        now = datetime.datetime.now()
+
         for mem in past_memories:
+            # Temporal weighting: Recent memories matter slightly more
+            weight = 1.0
+            ts_str = mem.get('timestamp')
+            if ts_str:
+                try:
+                    ts = datetime.datetime.fromisoformat(ts_str)
+                    days_old = (now - ts).days
+                    weight = max(0.5, 1.0 - (days_old * 0.05)) # Decay 5% per day, floor at 0.5
+                except ValueError:
+                    pass
+
             if mem.get('success') == 'True':
-                success_count += 1
-                total_resolved += 1
+                success_count += weight
+                total_resolved += weight
             elif mem.get('success') == 'False':
-                total_resolved += 1
+                total_resolved += weight
 
         if total_resolved == 0:
             confidence = 0.5
@@ -239,6 +253,85 @@ class ResearchAgent:
         except Exception as e:
             logger.exception(f"Error getting recent snapshots: {e}")
             return []
+
+    async def reflect_on_performance(self):
+        """Analyzes recent closed trades to identify winning/losing patterns and create a meta-prompt."""
+        try:
+            results = self.collection.get(limit=50)
+            if not results or not results.get("metadatas"):
+                return
+
+            # Simple simulation: identify top traits
+            successes = [m for m in results["metadatas"] if m.get("success") == "True"]
+            failures = [m for m in results["metadatas"] if m.get("success") == "False"]
+
+            if len(successes) > 5 and len(failures) > 5:
+                # Mock reflection logic for MVP. In reality, pass to LLM.
+                gemini_key = os.environ.get("GEMINI_API_KEY_RESEARCHER")
+                if gemini_key:
+                     prompt = f"Analyze {len(successes)} successful trades and {len(failures)} failed trades. What is the key difference?"
+                     reflection = await call_gemini_with_retry(gemini_key, prompt)
+                     self._add_thought(f"Strategy Reflection: {reflection[:100]}...")
+        except Exception as e:
+            self._add_thought(f"Reflection failed: {e}")
+
+    async def prune_old_snapshots(self):
+        """Prunes snapshots older than 7 days unless attached to a significant PnL trade (>5%)."""
+        try:
+            import datetime
+            cutoff = datetime.datetime.now() - datetime.timedelta(days=7)
+            results = self.collection.get(limit=1000)
+            if results and results.get("metadatas"):
+                for i, meta in enumerate(results["metadatas"]):
+                    timestamp_str = meta.get("timestamp")
+                    if timestamp_str:
+                        try:
+                            ts = datetime.datetime.fromisoformat(timestamp_str)
+                            if ts < cutoff:
+                                # Mocking the significant PnL attachment check via the 'success' string for now
+                                # In a real scenario, we'd check actual PnL value attached to metadata
+                                if meta.get("success") == "pending" or meta.get("success") == "False":
+                                     doc_id = results["ids"][i]
+                                     self.collection.delete(ids=[doc_id])
+                        except ValueError:
+                            pass
+        except Exception as e:
+             self._add_thought(f"Pruning failed: {e}")
+
+    async def listen_market_ticks(self, redis_client):
+        pubsub = redis_client.pubsub()
+        await pubsub.subscribe("market_ticks")
+        try:
+            async for message in pubsub.listen():
+                if message["type"] == "message":
+                    import json
+                    data = json.loads(message["data"].decode("utf-8"))
+                    symbol = data.get("symbol", "BTC")
+                    price = data.get("price")
+                    rsi = data.get("rsi")
+                    dxy = data.get("macro", {}).get("dxy")
+                    sp500 = data.get("macro", {}).get("sp500")
+                    news = data.get("news_sentiment", "Neutral")
+                    l2_book = data.get("order_book")
+                    macd = data.get("macd", 0.0)
+
+                    if price and rsi:
+                        conf = await self.analyze_current_state(symbol, price, rsi, dxy, sp500, news, l2_book, macd)
+
+                        if conf > 0.6:
+                            signal = {
+                                "symbol": symbol,
+                                "price": price,
+                                "confidence": conf,
+                                "l2_book": l2_book
+                            }
+                            await redis_client.publish("trade_signals", json.dumps(signal))
+        except Exception:
+            pass
+        finally:
+            await pubsub.unsubscribe("market_ticks")
+
+
 if __name__ == "__main__":
     agent = ResearchAgent()
     doc_id = agent.record_snapshot("BTC", 65000, 25)

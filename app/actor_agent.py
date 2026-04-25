@@ -20,6 +20,7 @@ class ActorAgent:
         self.wins = 0
         self.losses = 0
         self.circuit_breaker_active = False
+        self.paused = False
 
     def check_risk(self, trade_amount: float, total_wallet_value: float) -> bool:
         """Checks if a trade violates risk management parameters (e.g., size > 5% of wallet)."""
@@ -41,9 +42,13 @@ class ActorAgent:
 
 
     async def evaluate_exits(self, price: float, l2_book: dict = None):
-        """Autonomously decides when to close trades based on profit targets, stop loss, or LLM analysis."""
+        """Autonomously decides when to close trades based on profit targets, trailing stop loss, or LLM analysis."""
         if price is None or not isinstance(price, (int, float)):
             return []
+
+        if self.paused:
+            return []
+
         trades_to_close = []
         positions = list(self.open_positions.items())
 
@@ -54,14 +59,22 @@ class ActorAgent:
             ollama_model = os.environ.get("OLLAMA_MODEL", "deepseek-r1:8b")
             groq_key = os.environ.get("GROQ_API_KEY")
 
-            for trade_id, trade in positions:
+            async def evaluate_single_trade(trade_id, trade):
                 entry_price = trade["entry_price"]
                 pnl_pct = (price - entry_price) / entry_price
 
-                # Default algorithmic fallback
-                should_close = False
-                if pnl_pct > 0.02 or pnl_pct < -0.01:
-                    should_close = True
+                # Trailing Stop-Loss Logic
+                if "max_pnl_pct" not in trade:
+                    trade["max_pnl_pct"] = pnl_pct
+                else:
+                    trade["max_pnl_pct"] = max(trade["max_pnl_pct"], pnl_pct)
+
+                # If trailing PnL drops more than 1.5% from the peak, or hard stop at -1%
+                trailing_stop_hit = trade["max_pnl_pct"] > 0.02 and pnl_pct < (trade["max_pnl_pct"] - 0.015)
+                hard_stop_hit = pnl_pct < -0.01
+                take_profit_hit = pnl_pct > 0.05
+
+                should_close = trailing_stop_hit or hard_stop_hit or take_profit_hit
 
                 # Hybrid Local/Cloud LLM Evaluation only if neutral band
                 if not should_close and -0.01 <= pnl_pct <= 0.02:
@@ -77,10 +90,7 @@ class ActorAgent:
                                 data = await res.json()
                                 ans = data.get("choices", [{}])[0].get("message", {}).get("content", "")
                                 if "CLOSE" in ans.upper():
-                                    should_close = True
-                                print("Evaluated exit using Local Ollama")
-                            else:
-                                raise Exception("Ollama error")
+                                    return trade_id
                     except Exception as e:
                         # Fallback to Groq
                         if groq_key:
@@ -96,20 +106,21 @@ class ActorAgent:
                                         data = await res.json()
                                         ans = data.get("choices", [{}])[0].get("message", {}).get("content", "")
                                         if "CLOSE" in ans.upper():
-                                            should_close = True
-                                        print("Evaluated exit using Fallback Groq")
+                                            return trade_id
                             except Exception as e:
-                                print("Both LLM calls failed. Falling back to algorithmic analysis.")
-
+                                pass
                 if should_close:
-                    trades_to_close.append(trade_id)
+                    return trade_id
+                return None
+
+            tasks = [evaluate_single_trade(tid, tr) for tid, tr in positions]
+            results = await asyncio.gather(*tasks)
+            trades_to_close = [tid for tid in results if tid is not None]
 
         closed_results = []
         for trade_id in trades_to_close:
             result = await self.close_trade(trade_id, price, l2_book)
             if result.get("status") == "closed":
-                 # Inherit memory_doc_id from the original trade record before it was popped
-                 # Actually, it's already preserved in the result dict returned by close_trade
                  closed_results.append(result)
         return closed_results
 
@@ -117,17 +128,9 @@ class ActorAgent:
     async def execute_trade(self, symbol: str, price: float, confidence_score: float, l2_book: dict = None, total_wallet_value: float = None) -> dict:
         """
         Executes a mock trade with latency simulation, L2-based slippage, and fees.
-
-        Args:
-            symbol (str): The trading pair symbol.
-            price (float): The current market price.
-            confidence_score (float): AI confidence score (0.0 to 1.0) determining entry.
-            l2_book (dict, optional): Level 2 order book data for slippage calculation.
-            total_wallet_value (float, optional): Total wallet value used for risk assessment.
-
-        Returns:
-            dict: Trade execution result details.
         """
+        if getattr(self, "paused", False):
+            return {"status": "rejected", "reason": "Agent Paused"}
         if price is None or not isinstance(price, (int, float)):
             return {"status": "error", "reason": "Invalid price data"}
         if l2_book is not None and not isinstance(l2_book, dict):
@@ -145,8 +148,10 @@ class ActorAgent:
         if confidence_score < 0.4:
             return {"status": "skipped", "reason": f"Confidence too low: {confidence_score:.2f}"}
 
-        # Cap at 5% of wallet value to pass risk checks
-        trade_fraction = min(0.05, confidence_score * 0.05)
+        # Confidence-based sizing: scale between 2% and 10% of wallet based on confidence
+        base_fraction = 0.02
+        scaled_fraction = base_fraction + ((confidence_score - 0.4) / 0.6) * 0.08
+        trade_fraction = min(0.10, scaled_fraction)
         trade_amount = total_wallet_value * trade_fraction
 
 
@@ -344,6 +349,44 @@ class ActorAgent:
             "sharpe_ratio": sharpe_ratio,
             "circuit_breaker_active": self.circuit_breaker_active
         }
+
+
+    async def listen_market_ticks(self, redis_client):
+        pubsub = redis_client.pubsub()
+        await pubsub.subscribe("market_ticks")
+        try:
+            async for message in pubsub.listen():
+                if message["type"] == "message":
+                    import json
+                    data = json.loads(message["data"].decode("utf-8"))
+                    price = data.get("price")
+                    l2_book = data.get("order_book")
+                    if price:
+                        await self.evaluate_exits(price, l2_book)
+        except Exception:
+            pass
+        finally:
+            await pubsub.unsubscribe("market_ticks")
+
+    async def listen_trade_signals(self, redis_client):
+        pubsub = redis_client.pubsub()
+        await pubsub.subscribe("trade_signals")
+        try:
+            async for message in pubsub.listen():
+                if message["type"] == "message":
+                    import json
+                    data = json.loads(message["data"].decode("utf-8"))
+                    symbol = data.get("symbol")
+                    price = data.get("price")
+                    conf = data.get("confidence")
+                    l2_book = data.get("l2_book")
+                    if symbol and price and conf:
+                        await self.execute_trade(symbol, price, conf, l2_book)
+        except Exception:
+            pass
+        finally:
+            await pubsub.unsubscribe("trade_signals")
+
 
 if __name__ == "__main__":
     actor = ActorAgent()
